@@ -24,9 +24,11 @@ services:
         - action: sync
           path: ./api
           target: /app/api
-        # Rebuild si requirements.txt change
+        # Rebuild si les dépendances changent
         - action: rebuild
-          path: requirements.txt
+          path: pyproject.toml
+        - action: rebuild
+          path: uv.lock
           
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]

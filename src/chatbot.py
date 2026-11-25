@@ -1,6 +1,4 @@
 from mistralai import Mistral
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage, SystemMessage
 import os
 import pandas as pd
 import faiss

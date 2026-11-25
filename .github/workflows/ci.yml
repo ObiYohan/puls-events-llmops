@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    name: Tests unitaires
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Installer Python 3.13
+        run: uv python install 3.13
+
+      - name: Installer les dépendances
+        run: uv sync --locked
+
+      # L'API Mistral est mockée : aucun secret n'est nécessaire ici.
+      - name: Lancer les tests
+        run: uv run pytest tests/ --cov=src --cov=api --cov-report=term-missing --cov-report=xml
+
+      - name: Publier la couverture
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage.xml

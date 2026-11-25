@@ -8,7 +8,6 @@ import sys
 import os
 import subprocess
 import faiss
-from requests import request
 
 # Add parent directory to path to import chatbot
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

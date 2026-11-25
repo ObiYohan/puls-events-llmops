@@ -125,7 +125,7 @@ Ce POC vise à **démontrer la faisabilité technique et la valeur métier** d'u
 ### 1. Cloner le repository
 
     git clone <url-du-repo>
-    cd Projet_7
+    cd puls-events-llmops
 
 ### 2. Créer le fichier d'environnement
 
@@ -168,7 +168,7 @@ Suivez les étapes du notebook pour :
 
 - docker-compose.yml : Configuration des services Docker
 - Dockerfile : Image de l'application
-- requirements.txt : Dépendances Python
+- pyproject.toml / uv.lock : dépendances Python (gérées avec uv)
 
 ## 🚀 Déploiement
 
@@ -239,12 +239,12 @@ Documentation interactive disponible sur :
 
 ### Structure du projet
 
-    Projet_7/
+    puls-events-llmops/
     ├── api/
     │   └── main_api.py          # FastAPI endpoints
     ├── src/
     │   ├── chatbot.py           # Logique du chatbot
-    │   └── data_process.ipynb   # Prétraitement des données
+    │   └── load_new_data.py     # Chunking et embeddings
     ├── data/
     │   ├── evenements-publics-openagenda_26.json
     │   ├── chunks_with_embeddings.json
@@ -256,7 +256,8 @@ Documentation interactive disponible sur :
     │   └── test_queries.json
     ├── docker-compose.yml
     ├── Dockerfile
-    ├── requirements.txt
+    ├── pyproject.toml
+    ├── uv.lock
     ├── .env.example
     └── README.md
 

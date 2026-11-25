@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Outils et dépôt
+.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+
+# Secrets : injectés à l'exécution, jamais dans l'image
+.env
+
+# Hors image : tests, exploration, artefacts locaux
+tests/
+*.ipynb
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.deepeval/
+mlruns/
+mlartifacts/
+*.db
+*.log
