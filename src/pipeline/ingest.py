@@ -11,17 +11,16 @@
 Usage : ``uv run python -m src.pipeline.ingest`` (ou ``uv run dvc repro ingest``).
 """
 
-import json
 import logging
 import time
 from datetime import UTC, date, datetime
-from pathlib import Path
 from typing import Any
 
 import httpx
 
 from src.config import IngestParams, get_params
 from src.logging_utils import setup_logging
+from src.pipeline.utils import write_json
 
 logger = logging.getLogger(__name__)
 
@@ -100,12 +99,6 @@ def clean_events(
     events = [by_uid[uid] for uid in sorted(by_uid)]
     stats["n_kept"] = len(events)
     return events, stats
-
-
-def write_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, sort_keys=True)
 
 
 def run(snapshot_date: date | None = None) -> dict[str, Any]:

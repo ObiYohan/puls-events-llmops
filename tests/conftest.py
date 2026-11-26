@@ -46,6 +46,18 @@ def mock_mistral_api():
         
         yield mock_client
 
+@pytest.fixture
+def isolated_params(tmp_path):
+    """Paramètres du projet avec tous les chemins redirigés sous tmp_path."""
+    from src.config import PROJECT_ROOT, get_params
+
+    params = get_params()
+    paths = params.paths.model_copy(update={
+        name: tmp_path / value.relative_to(PROJECT_ROOT) for name, value in params.paths
+    })
+    return params.model_copy(update={"paths": paths})
+
+
 @pytest.fixture(autouse=True)
 def ignore_local_dotenv(monkeypatch):
     """Empêche le .env local (vraies clés) d'être chargé pendant les tests."""

@@ -5,6 +5,10 @@
 paths:                         # relatifs à la racine du projet
   raw_events: data/raw/events.json
   ingest_metrics: metrics/ingest.json
+  chunks_dataset: data/processed/chunks.json
+  chunk_metrics: metrics/chunk.json
+  embeddings: data/processed/embeddings   # dossier : keys.json + vectors.npy + meta.json
+  embed_metrics: metrics/embed.json
   new_data: data/new-data.json
   chunks: data/chunks_with_embeddings.json
   index: data/faiss_index.idx
@@ -56,7 +60,9 @@ embedding:
   model: mistral-embed
   max_tokens_per_batch: 7000
   pause_seconds: 2.0           # pause entre deux lots (quotas Mistral)
-  rate_limit_pause_seconds: 60.0
+  max_retries: 5               # sur 429, 5xx et erreurs réseau
+  retry_base_seconds: 10.0     # délai doublé à chaque tentative : 10, 20, 40, 80, 160 s
+  rate_limit_pause_seconds: 60.0  # utilisé par l'ancien load_new_data.py (supprimé à l'étape 3)
 
 retrieval:
   k: 5                         # nombre d'événements distincts envoyés au LLM

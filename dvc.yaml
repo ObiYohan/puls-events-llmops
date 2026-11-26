@@ -5,6 +5,7 @@ stages:
     cmd: python -m src.pipeline.ingest
     deps:
       - src/pipeline/ingest.py
+      - src/pipeline/utils.py
     params:
       - ingest
     outs:
@@ -15,3 +16,35 @@ stages:
     # La source est externe : on interroge l'API à chaque exécution. Si le
     # contenu n'a pas changé, le hash est identique et la suite n'est pas relancée.
     always_changed: true
+
+  chunk:
+    cmd: python -m src.pipeline.chunk
+    deps:
+      - src/pipeline/chunk.py
+      - src/pipeline/utils.py
+      - ${paths.raw_events}
+    params:
+      - chunking
+    outs:
+      - ${paths.chunks_dataset}
+    metrics:
+      - ${paths.chunk_metrics}:
+          cache: false
+
+  embed:
+    cmd: python -m src.pipeline.embed
+    deps:
+      - src/pipeline/embed.py
+      - src/pipeline/utils.py
+      - ${paths.chunks_dataset}
+    params:
+      - embedding
+      - chunking.tokenizer
+    outs:
+      # Le dossier sert aussi de cache : DVC ne le vide pas avant l'exécution,
+      # seuls les chunks nouveaux ou modifiés sont envoyés à l'API Mistral.
+      - ${paths.embeddings}:
+          persist: true
+    metrics:
+      - ${paths.embed_metrics}:
+          cache: false

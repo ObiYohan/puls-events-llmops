@@ -27,6 +27,10 @@ class _Section(BaseModel):
 class PathsParams(_Section):
     raw_events: Path
     ingest_metrics: Path
+    chunks_dataset: Path
+    chunk_metrics: Path
+    embeddings: Path
+    embed_metrics: Path
     new_data: Path
     chunks: Path
     index: Path
@@ -87,6 +91,8 @@ class EmbeddingParams(_Section):
     model: str
     max_tokens_per_batch: int = Field(gt=0)
     pause_seconds: float = Field(ge=0)
+    max_retries: int = Field(ge=0)
+    retry_base_seconds: float = Field(ge=0)
     rate_limit_pause_seconds: float = Field(ge=0)
 
 

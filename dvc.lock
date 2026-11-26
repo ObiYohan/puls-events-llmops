@@ -51,3 +51,40 @@ stages:
       hash: md5
       md5: 53701c9ff06424ff2cfc67c381c4742a
       size: 115
+  chunk:
+    cmd: python -m src.pipeline.chunk
+    deps:
+    - path: data/raw/events.json
+      hash: md5
+      md5: 53fa51717d87d2d230ff94cdd293dc99
+      size: 4485564
+    - path: src/pipeline/chunk.py
+      hash: md5
+      md5: 6661f583b567613c67100c645d7b4f45
+      size: 5004
+    - path: src/pipeline/utils.py
+      hash: md5
+      md5: 05504ca34eae99c071a1ef8262aff2ac
+      size: 1093
+    params:
+      params.yaml:
+        chunking:
+          tokenizer: cl100k_base
+          split_threshold: 512
+          chunk_size: 400
+          chunk_overlap: 50
+          separators:
+          - "\n\n"
+          - "\n"
+          - '. '
+          - ' '
+          - ''
+    outs:
+    - path: data/processed/chunks.json
+      hash: md5
+      md5: b99c22c840c304c492085151e380f619
+      size: 3352501
+    - path: metrics/chunk.json
+      hash: md5
+      md5: be44386c1d98323a0f8f9a4850ef2a00
+      size: 142
