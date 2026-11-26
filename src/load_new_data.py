@@ -1,32 +1,33 @@
 from mistralai import Mistral
 import pandas as pd
-from pathlib import Path
-import os
 import tiktoken
 import sys
 import time
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from src.config import get_params, get_secret
 
 # ✅ FORCER L'ENCODAGE UTF-8 POUR LA CONSOLE WINDOWS
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
 
-# ✅ DÉFINIR LES CHEMINS ABSOLUS
-BASE_DIR = Path(__file__).parent.parent
-DATA_DIR = BASE_DIR / 'data'
-INPUT_FILE = DATA_DIR / 'new-data.json'
-OUTPUT_FILE = DATA_DIR / 'chunks_with_embeddings.json'
+params = get_params()
+
+INPUT_FILE = params.paths.new_data
+OUTPUT_FILE = params.paths.chunks
 
 # Initialiser l'encodeur
-encoding = tiktoken.get_encoding("cl100k_base")
+encoding = tiktoken.get_encoding(params.chunking.tokenizer)
 
 def count_tokens(text):
     """Calcule le nombre de tokens dans un texte"""
     return len(encoding.encode(text))
 
-def create_smart_batches(texts, max_tokens_per_batch=8000):
+def create_smart_batches(texts, max_tokens_per_batch=None):
     """Crée des batches en fonction du nombre de tokens"""
+    if max_tokens_per_batch is None:
+        max_tokens_per_batch = params.embedding.max_tokens_per_batch
     batches = []
     current_batch = []
     current_tokens = 0
@@ -74,10 +75,10 @@ def create_enriched_text(row):
 
 # Configuration du splitter (au niveau module, c'est OK)
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=400,
-    chunk_overlap=50,
+    chunk_size=params.chunking.chunk_size,
+    chunk_overlap=params.chunking.chunk_overlap,
     length_function=count_tokens,
-    separators=["\n\n", "\n", ". ", " ", ""]
+    separators=params.chunking.separators
 )
 
 def process_description(row):
@@ -99,7 +100,7 @@ def process_description(row):
     location_phone = row.get("location_phone", None)
     location_website = row.get("location_website", None)
     
-    if token_count <= 512:
+    if token_count <= params.chunking.split_threshold:
         return [{
             "uid": uid,
             "chunk_id": 0,
@@ -213,13 +214,14 @@ def create_chunks(source_data):
 def generate_embeddings(chunks_df, api_key=None):
     """Génère les embeddings avec l'API Mistral"""
     if api_key is None:
-        api_key = os.getenv("MISTRAL_API_KEY", "")
+        api_key = get_secret("MISTRAL_API_KEY")
     
     if not api_key or api_key.strip() == "":
         raise ValueError("MISTRAL_API_KEY non définie")
     
+    embedding = params.embedding
     texts_to_embed = chunks_df["text_for_embedding"].tolist()
-    batches = create_smart_batches(texts_to_embed, max_tokens_per_batch=7000)
+    batches = create_smart_batches(texts_to_embed)
     
     print(f"\n✓ {len(batches)} batches créés")
     
@@ -231,7 +233,7 @@ def generate_embeddings(chunks_df, api_key=None):
             
             try:
                 res = mistral.embeddings.create(
-                    model="mistral-embed", 
+                    model=embedding.model, 
                     inputs=batch
                 )
                 
@@ -239,14 +241,14 @@ def generate_embeddings(chunks_df, api_key=None):
                 print(f"Total embeddings accumulés: {len(all_embeddings)}")
                 
                 if i < len(batches) - 1:
-                    time.sleep(2)
+                    time.sleep(embedding.pause_seconds)
                     
             except Exception as e:
                 if "429" in str(e) or "rate_limited" in str(e).lower():
-                    print(f"Rate limit atteint, pause de 60s...")
-                    time.sleep(60)
+                    print(f"Rate limit atteint, pause de {embedding.rate_limit_pause_seconds}s...")
+                    time.sleep(embedding.rate_limit_pause_seconds)
                     res = mistral.embeddings.create(
-                        model="mistral-embed", 
+                        model=embedding.model, 
                         inputs=batch
                     )
                     all_embeddings.extend([item.embedding for item in res.data])
@@ -273,7 +275,7 @@ if __name__ == "__main__":
     print("\n[INFO] Démarrage du traitement...")
     
     # Charger et filtrer
-    source_data = load_and_filter_data()
+    source_data = load_and_filter_data(INPUT_FILE)
     
     # Créer les chunks
     chunks_df = create_chunks(source_data)

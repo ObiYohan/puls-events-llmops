@@ -47,6 +47,12 @@ def mock_mistral_api():
         yield mock_client
 
 @pytest.fixture(autouse=True)
+def ignore_local_dotenv(monkeypatch):
+    """Empêche le .env local (vraies clés) d'être chargé pendant les tests."""
+    monkeypatch.setattr("src.config._load_dotenv", lambda: None)
+
+
+@pytest.fixture(autouse=True)
 def set_test_env_vars():
     """Définir les variables d'environnement pour les tests"""
     os.environ['MISTRAL_API_KEY'] = 'test_mock_key_12345'

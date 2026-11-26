@@ -12,6 +12,7 @@ import faiss
 # Add parent directory to path to import chatbot
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.chatbot import EventChatbot
+from src.config import get_params
 
 # Global chatbot instance
 chatbot_instance = None
@@ -66,7 +67,7 @@ app.add_middleware(
 # Pydantic models
 class QueryRequest(BaseModel):
     query: str = Field(..., description="Question de l'utilisateur", min_length=1)
-    k: int = Field(default=5, description="Nombre d'événements à rechercher", ge=1, le=20)
+    k: int = Field(default_factory=lambda: get_params().retrieval.k, description="Nombre d'événements à rechercher", ge=1, le=20)
     show_sources: bool = Field(default=True, description="Afficher les sources utilisées")
 
 class Source(BaseModel):

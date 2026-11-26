@@ -25,17 +25,19 @@ import pandas as pd
 
 sys.path.append(str(Path(__file__).parent.parent))
 from src.chatbot import EventChatbot
+from src.config import get_params, get_secret
 
 
 class MistralModel(DeepEvalBaseLLM):
     """Wrapper Mistral pour DeepEval avec rate limiting et retry"""
     
-    def __init__(self, delay: float = 7.0):
+    def __init__(self, delay: float | None = None):
         from mistralai import Mistral
-        import os
-        self.client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
-        self.model = "mistral-large-latest"
-        self.delay = delay
+        evaluation = get_params().evaluation
+        self.client = Mistral(api_key=get_secret("MISTRAL_API_KEY"))
+        self.model = evaluation.judge_model
+        self.delay = evaluation.judge_delay_seconds if delay is None else delay
+        self.max_retries = evaluation.judge_max_retries
         self.last_call_time = 0
     
     def load_model(self):
@@ -50,7 +52,9 @@ class MistralModel(DeepEvalBaseLLM):
             time.sleep(wait_time)
         self.last_call_time = time.time()
     
-    def generate(self, prompt: str, max_retries: int = 5) -> str:
+    def generate(self, prompt: str, max_retries: int | None = None) -> str:
+        if max_retries is None:
+            max_retries = self.max_retries
         for attempt in range(max_retries):
             try:
                 self._wait_if_needed()
@@ -137,9 +141,12 @@ def build_rich_context(relevant_chunks: pd.DataFrame) -> list[str]:
     return context_items
 
 
-def evaluate_with_deepeval(delay_between_calls: float = 10.0, api_delay: float = 5.0, 
+def evaluate_with_deepeval(delay_between_calls: float | None = None, api_delay: float | None = None,
                           start_from: int = 0, max_tests: int = None):
-    """Évaluation avec DeepEval"""
+    """Évaluation avec DeepEval (délais par défaut : section evaluation de params.yaml)"""
+    params = get_params()
+    if delay_between_calls is None:
+        delay_between_calls = params.evaluation.delay_between_cases_seconds
     print("🤖 Initialisation...")
     chatbot = EventChatbot()
     mistral_model = MistralModel(delay=api_delay)
@@ -168,7 +175,7 @@ def evaluate_with_deepeval(delay_between_calls: float = 10.0, api_delay: float =
         
         print(f"\n📝 [{i}/{len(test_data)}] {query}")
         
-        relevant_chunks, _ = chatbot.search_relevant_events(query, k=5)
+        relevant_chunks, _ = chatbot.search_relevant_events(query)
         context_str = chatbot.format_context(relevant_chunks)
         answer = chatbot.generate_response(query, context_str)
 
@@ -187,11 +194,12 @@ def evaluate_with_deepeval(delay_between_calls: float = 10.0, api_delay: float =
             print(f"  ⏸️  Pause de {delay_between_calls}s...")
             time.sleep(delay_between_calls)
     
+    thresholds = params.evaluation.thresholds
     metrics = [
-        AnswerRelevancyMetric(model=mistral_model, threshold=0.7),
-        FaithfulnessMetric(model=mistral_model, threshold=0.7),
-        ContextualPrecisionMetric(model=mistral_model, threshold=0.7),
-        ContextualRecallMetric(model=mistral_model, threshold=0.7)
+        AnswerRelevancyMetric(model=mistral_model, threshold=thresholds.answer_relevancy),
+        FaithfulnessMetric(model=mistral_model, threshold=thresholds.faithfulness),
+        ContextualPrecisionMetric(model=mistral_model, threshold=thresholds.contextual_precision),
+        ContextualRecallMetric(model=mistral_model, threshold=thresholds.contextual_recall)
     ]
     
     print("\n🧪 Évaluation en cours (mode séquentiel)...")
@@ -320,8 +328,6 @@ def save_evaluation_results(df: pd.DataFrame, test_cases_data: list, results: li
 if __name__ == "__main__": 
     # Relancer uniquement le test 1
     evaluate_with_deepeval(
-        delay_between_calls=15.0,
-        api_delay=8.0,
         start_from=0,
         max_tests=1
     )

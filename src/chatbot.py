@@ -3,29 +3,25 @@ import os
 import pandas as pd
 import faiss
 import numpy as np
-from dotenv import load_dotenv
 from datetime import datetime
-from pathlib import Path
 import re
 import unicodedata
 
+from src.config import Params, get_params, get_secret
 
-load_dotenv()
-
-api_key = os.getenv("MISTRAL_API_KEY", "")
 
 class EventChatbot:
     """Chatbot intelligent pour recommander des événements"""
     
-    def __init__(self, index_path=None, chunks_path=None):
+    def __init__(self, index_path=None, chunks_path=None, params: Params | None = None):
         """Initialise le chatbot avec l'index FAISS et les métadonnées"""
-        
-        project_root = Path(__file__).parent.parent
-        
+
+        self.params = params or get_params()
+
         if index_path is None:
-            index_path = project_root / "data/faiss_index.idx"
+            index_path = self.params.paths.index
         if chunks_path is None:
-            chunks_path = project_root / "data/chunks_with_embeddings.json"
+            chunks_path = self.params.paths.chunks
         
         if not os.path.exists(index_path):
             raise FileNotFoundError(
@@ -70,7 +66,7 @@ class EventChatbot:
         print(f"📍 {len(self.available_cities)} villes détectées dans les données")
         print(f"📮 {len(self.available_postal_codes)} codes postaux détectés")
         
-        self.mistral = Mistral(api_key=api_key)
+        self.mistral = Mistral(api_key=get_secret("MISTRAL_API_KEY"))
         
         self.system_prompt = """Tu es un assistant spécialisé dans la recommandation d'événements culturels.
 
@@ -105,7 +101,7 @@ class EventChatbot:
     def vectorize_query(self, query):
         """Vectorise la requête utilisateur"""
         query_res = self.mistral.embeddings.create(
-            model="mistral-embed",
+            model=self.params.embedding.model,
             inputs=[query]
         )
         return np.array([query_res.data[0].embedding])
@@ -270,7 +266,7 @@ class EventChatbot:
         temp_index = faiss.IndexFlatL2(filtered_embeddings.shape[1])
         temp_index.add(filtered_embeddings)
         
-        search_k = min(k * 10, len(df))
+        search_k = min(k * self.params.retrieval.candidate_factor, len(df))
         distances, local_indices = temp_index.search(query_embedding, search_k)
         
         global_indices = [filtered_indices[i] for i in local_indices[0]]
@@ -299,11 +295,14 @@ class EventChatbot:
         
         return result_df, final_distances
 
-    def search_relevant_events(self, query, k=10):
+    def search_relevant_events(self, query, k=None):
         """
         Recherche les événements les plus pertinents.
-        
+
+        k : nombre d'événements distincts (défaut : retrieval.k de params.yaml).
         """
+        if k is None:
+            k = self.params.retrieval.k
         temporal_filter = self.extract_temporal_filter(query)
         location_filter = self.extract_location_filter(query)
         
@@ -415,19 +414,20 @@ class EventChatbot:
             context=context
         )
         
+        generation = self.params.generation
         response = self.mistral.chat.complete(
-            model="open-mistral-7b",
+            model=generation.model,
             messages=[
                 {"role": "system", "content": full_prompt},
                 {"role": "user", "content": query}
             ],
-            temperature=0.3,
-            max_tokens=1000
+            temperature=generation.temperature,
+            max_tokens=generation.max_tokens
         )
         
         return response.choices[0].message.content
     
-    def chat(self, user_query, k=5, show_sources=True):
+    def chat(self, user_query, k=None, show_sources=True):
         """Fonction principale du chatbot"""
         print(f"\n🤖 Recherche d'événements pour : '{user_query}'")
         
