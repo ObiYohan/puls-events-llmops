@@ -25,6 +25,8 @@ class _Section(BaseModel):
 
 
 class PathsParams(_Section):
+    raw_events: Path
+    ingest_metrics: Path
     new_data: Path
     chunks: Path
     index: Path
@@ -34,6 +36,37 @@ class PathsParams(_Section):
     def _resolve_from_root(cls, value: Path) -> Path:
         """Les chemins relatifs sont résolus depuis la racine du projet."""
         return value if value.is_absolute() else PROJECT_ROOT / value
+
+
+# Champs indispensables aux étapes suivantes (découpage, filtres date et lieu).
+REQUIRED_EVENT_FIELDS = frozenset({
+    "uid", "longdescription_fr",
+    "firstdate_begin", "firstdate_end", "lastdate_begin", "lastdate_end",
+})
+# Données personnelles des contributeurs OpenAgenda : jamais ingérées.
+FORBIDDEN_FIELD_PREFIX = "contributor_"
+
+
+class IngestParams(_Section):
+    base_url: str = Field(pattern=r"^https://")
+    region: str = Field(min_length=1)
+    timeout_seconds: float = Field(gt=0)
+    max_retries: int = Field(ge=0)
+    retry_base_seconds: float = Field(ge=0)
+    fields: list[str] = Field(min_length=1)
+
+    @field_validator("fields")
+    @classmethod
+    def _check_fields(cls, fields: list[str]) -> list[str]:
+        if len(set(fields)) != len(fields):
+            raise ValueError("ingest.fields contient des doublons")
+        forbidden = [f for f in fields if f.startswith(FORBIDDEN_FIELD_PREFIX)]
+        if forbidden:
+            raise ValueError(f"champs personnels interdits dans ingest.fields : {forbidden}")
+        missing = REQUIRED_EVENT_FIELDS - set(fields)
+        if missing:
+            raise ValueError(f"champs indispensables absents de ingest.fields : {sorted(missing)}")
+        return fields
 
 
 class ChunkingParams(_Section):
@@ -85,6 +118,7 @@ class EvaluationParams(_Section):
 
 class Params(_Section):
     paths: PathsParams
+    ingest: IngestParams
     chunking: ChunkingParams
     embedding: EmbeddingParams
     retrieval: RetrievalParams

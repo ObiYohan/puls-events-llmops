@@ -1,0 +1,17 @@
+# Pipeline RAG : ingest → chunk → embed → build_index → evaluate
+# Les ${...} sont lus dans params.yaml : les chemins ne sont définis qu'une fois.
+stages:
+  ingest:
+    cmd: python -m src.pipeline.ingest
+    deps:
+      - src/pipeline/ingest.py
+    params:
+      - ingest
+    outs:
+      - ${paths.raw_events}
+    metrics:
+      - ${paths.ingest_metrics}:
+          cache: false
+    # La source est externe : on interroge l'API à chaque exécution. Si le
+    # contenu n'a pas changé, le hash est identique et la suite n'est pas relancée.
+    always_changed: true

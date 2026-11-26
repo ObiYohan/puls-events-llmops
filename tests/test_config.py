@@ -55,6 +55,18 @@ def test_overlap_must_be_smaller_than_chunk_size(tmp_path, raw_params):
         load_params(write_params(tmp_path, raw_params))
 
 
+def test_contributor_fields_are_rejected(tmp_path, raw_params):
+    raw_params["ingest"]["fields"].append("contributor_email")
+    with pytest.raises(ValidationError, match="contributor_email"):
+        load_params(write_params(tmp_path, raw_params))
+
+
+def test_required_event_fields_cannot_be_removed(tmp_path, raw_params):
+    raw_params["ingest"]["fields"].remove("longdescription_fr")
+    with pytest.raises(ValidationError, match="longdescription_fr"):
+        load_params(write_params(tmp_path, raw_params))
+
+
 def test_params_are_immutable():
     params = load_params()
     with pytest.raises(ValidationError):

@@ -3,9 +3,47 @@
 # Les secrets n'ont rien à faire ici : ils passent par les variables d'environnement.
 
 paths:                         # relatifs à la racine du projet
+  raw_events: data/raw/events.json
+  ingest_metrics: metrics/ingest.json
   new_data: data/new-data.json
   chunks: data/chunks_with_embeddings.json
   index: data/faiss_index.idx
+
+ingest:
+  # Jeu public « evenements-publics-openagenda » sur OpenDataSoft (sans clé d'API)
+  base_url: https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/evenements-publics-openagenda
+  region: Provence-Alpes-Côte d'Azur
+  timeout_seconds: 120
+  max_retries: 3
+  retry_base_seconds: 5.0      # délai doublé à chaque nouvelle tentative
+  # Liste blanche : seuls ces champs sont conservés. Les champs contributor_*
+  # (nom, e-mail, téléphone des contributeurs) sont refusés par la validation.
+  fields:
+    - uid
+    - title_fr
+    - description_fr
+    - longdescription_fr
+    - conditions_fr
+    - keywords_fr
+    - daterange_fr
+    - timings
+    - firstdate_begin
+    - firstdate_end
+    - lastdate_begin
+    - lastdate_end
+    - updatedat
+    - canonicalurl
+    - attendancemode
+    - age_min
+    - age_max
+    - location_name
+    - location_address
+    - location_city
+    - location_postalcode
+    - location_department
+    - location_region
+    - location_phone
+    - location_website
 
 chunking:
   tokenizer: cl100k_base       # encodage tiktoken utilisé pour compter les tokens

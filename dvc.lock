@@ -1,0 +1,53 @@
+schema: '2.0'
+stages:
+  ingest:
+    cmd: python -m src.pipeline.ingest
+    deps:
+    - path: src/pipeline/ingest.py
+      hash: md5
+      md5: 15fdf1b6b69e03e254c55e495473e27f
+      size: 5408
+    params:
+      params.yaml:
+        ingest:
+          base_url: 
+            https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/evenements-publics-openagenda
+          region: Provence-Alpes-Côte d'Azur
+          timeout_seconds: 120
+          max_retries: 3
+          retry_base_seconds: 5.0
+          fields:
+          - uid
+          - title_fr
+          - description_fr
+          - longdescription_fr
+          - conditions_fr
+          - keywords_fr
+          - daterange_fr
+          - timings
+          - firstdate_begin
+          - firstdate_end
+          - lastdate_begin
+          - lastdate_end
+          - updatedat
+          - canonicalurl
+          - attendancemode
+          - age_min
+          - age_max
+          - location_name
+          - location_address
+          - location_city
+          - location_postalcode
+          - location_department
+          - location_region
+          - location_phone
+          - location_website
+    outs:
+    - path: data/raw/events.json
+      hash: md5
+      md5: 53fa51717d87d2d230ff94cdd293dc99
+      size: 4485564
+    - path: metrics/ingest.json
+      hash: md5
+      md5: 53701c9ff06424ff2cfc67c381c4742a
+      size: 115
