@@ -24,6 +24,9 @@ ingest:
   timeout_seconds: 120
   max_retries: 3
   retry_base_seconds: 5.0      # délai doublé à chaque nouvelle tentative
+  # Un événement commençant plus de N jours après la collecte est écarté : ce sont
+  # des dates factices (66 hébergements saisis au 01/01/2032 le 27/11/2026).
+  max_days_ahead: 730
   # Liste blanche : seuls ces champs sont conservés. Les champs contributor_*
   # (nom, e-mail, téléphone des contributeurs) sont refusés par la validation.
   fields:

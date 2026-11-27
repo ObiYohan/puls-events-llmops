@@ -12,8 +12,9 @@ Usage : ``uv run python -m src.pipeline.ingest`` (ou ``uv run dvc repro ingest``
 """
 
 import logging
+import re
 import time
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -74,12 +75,61 @@ def _has_description(event: dict[str, Any]) -> bool:
     return isinstance(text, str) and bool(text.strip())
 
 
+def _parse_datetime(value: Any) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _normalize(value: Any) -> str:
+    return re.sub(r"\W+", " ", str(value or "").lower()).strip()
+
+
+def content_key(event: dict[str, Any]) -> tuple[str, ...] | None:
+    """Clé d'un même événement publié sous plusieurs uid : titre, lieu, ville et dates.
+
+    ``None`` sans titre : sans lui, deux événements différents au même endroit et
+    aux mêmes horaires seraient confondus.
+    """
+    title = _normalize(event.get("title_fr"))
+    if not title:
+        return None
+    return (
+        title, _normalize(event.get("location_name")), _normalize(event.get("location_city")),
+        str(event.get("firstdate_begin")), str(event.get("lastdate_end")),
+    )
+
+
+def _newer(event: dict[str, Any], other: dict[str, Any]) -> bool:
+    """Vrai si ``event`` est la version à garder : mise à jour la plus récente,
+    puis, à date égale, le plus petit uid (résultat indépendant de l'ordre reçu)."""
+    mine, theirs = str(event.get("updatedat") or ""), str(other.get("updatedat") or "")
+    if mine != theirs:
+        return mine > theirs
+    return str(event["uid"]) < str(other["uid"])
+
+
 def clean_events(
-    raw_events: list[dict[str, Any]], fields: list[str]
+    raw_events: list[dict[str, Any]], params: IngestParams, snapshot_date: date
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """Applique la liste blanche, écarte les événements sans description, déduplique et trie."""
-    allowed = set(fields)
-    stats = {"n_received": len(raw_events), "n_without_description": 0, "n_duplicates": 0}
+    """Nettoie la collecte et renvoie (événements triés par uid, statistiques).
+
+    1. liste blanche des champs ; événements sans description écartés ;
+    2. un seul exemplaire par uid (la version la plus récemment mise à jour) ;
+    3. dates invalides, événements terminés avant le jour de collecte et
+       événements commençant au-delà de ``max_days_ahead`` jours écartés (dates
+       factices, p. ex. hébergements saisis au 01/01/2032) ;
+    4. un seul exemplaire d'un même événement publié sous plusieurs uid
+       (``content_key``). Les séries récurrentes (même texte, autres dates ou
+       autres lieux) sont des occurrences distinctes et sont conservées.
+    """
+    allowed = set(params.fields)
+    stats = {
+        "n_received": len(raw_events), "n_without_description": 0, "n_duplicates": 0,
+        "n_invalid_dates": 0, "n_past": 0, "n_beyond_horizon": 0, "n_content_duplicates": 0,
+    }
 
     by_uid: dict[str, dict[str, Any]] = {}
     for raw in raw_events:
@@ -91,12 +141,41 @@ def clean_events(
         previous = by_uid.get(uid)
         if previous is not None:
             stats["n_duplicates"] += 1
-            # On garde la version la plus récemment mise à jour.
-            if str(event.get("updatedat") or "") <= str(previous.get("updatedat") or ""):
+            if not _newer(event, previous):
                 continue
         by_uid[uid] = event
 
-    events = [by_uid[uid] for uid in sorted(by_uid)]
+    start_of_day = datetime.combine(snapshot_date, datetime.min.time(), tzinfo=UTC)
+    horizon = start_of_day + timedelta(days=params.max_days_ahead)
+    dated: list[dict[str, Any]] = []
+    for uid in sorted(by_uid):
+        event = by_uid[uid]
+        begin, end = _parse_datetime(event.get("firstdate_begin")), _parse_datetime(event.get("lastdate_end"))
+        if begin is None or end is None:
+            stats["n_invalid_dates"] += 1
+        elif end < start_of_day:
+            stats["n_past"] += 1
+        elif begin > horizon:
+            stats["n_beyond_horizon"] += 1
+        else:
+            dated.append(event)
+
+    by_content: dict[tuple[str, ...], dict[str, Any]] = {}
+    events: list[dict[str, Any]] = []
+    for event in dated:
+        key = content_key(event)
+        if key is None:
+            events.append(event)
+            continue
+        previous = by_content.get(key)
+        if previous is not None:
+            stats["n_content_duplicates"] += 1
+            if not _newer(event, previous):
+                continue
+        by_content[key] = event
+    events += by_content.values()
+
+    events.sort(key=lambda e: str(e["uid"]))
     stats["n_kept"] = len(events)
     return events, stats
 
@@ -108,7 +187,7 @@ def run(snapshot_date: date | None = None) -> dict[str, Any]:
     logger.info("ingest_start", extra={"region": params.ingest.region, "snapshot_date": snapshot_date.isoformat()})
 
     raw_events = fetch_events(params.ingest, snapshot_date)
-    events, stats = clean_events(raw_events, params.ingest.fields)
+    events, stats = clean_events(raw_events, params.ingest, snapshot_date)
     if not events:
         # Échec volontaire : DVC n'enregistre pas de nouvelle version et la
         # dernière version valide reste récupérable (dvc checkout).

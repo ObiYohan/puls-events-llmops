@@ -62,6 +62,7 @@ class IngestParams(_Section):
     timeout_seconds: float = Field(gt=0)
     max_retries: int = Field(ge=0)
     retry_base_seconds: float = Field(ge=0)
+    max_days_ahead: int = Field(gt=0)
     fields: list[str] = Field(min_length=1)
 
     @field_validator("fields")
