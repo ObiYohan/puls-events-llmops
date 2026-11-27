@@ -194,3 +194,18 @@ def test_run_params_use_the_judge_actually_used_by_the_evaluation(params):
     logged = promote.run_params(params, evaluation(judge_reasoning_effort="high", judge_model="juge-du-run"))
     assert logged["judge_reasoning_effort"] == "high"
     assert logged["judge_model"] == "juge-du-run"
+
+
+def test_git_info_ignores_pipeline_outputs(monkeypatch):
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        from types import SimpleNamespace
+        return SimpleNamespace(stdout="abc123\n" if "rev-parse" in args else "")
+
+    monkeypatch.setattr(promote.subprocess, "run", fake_run)
+    info = promote.git_info()
+    assert info == {"git_commit": "abc123", "git_dirty": "False"}
+    status = next(c for c in calls if "status" in c)
+    assert ":!dvc.lock" in status and ":!metrics" in status and "--untracked-files=no" in status

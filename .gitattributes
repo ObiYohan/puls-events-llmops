@@ -1,0 +1,12 @@
+# Fins de ligne LF partout, y compris sous Windows : DVC calcule l'empreinte des
+# dépendances (code, prompt, params.yaml) sur les octets bruts. Sans cette règle,
+# core.autocrlf=true convertit en CRLF à l'extraction et les empreintes calculées
+# sous Windows et dans la CI (Linux) diffèrent : DVC relancerait tout le pipeline,
+# évaluation payante comprise, à chaque exécution.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.idx binary
+*.index binary
+*.npy binary

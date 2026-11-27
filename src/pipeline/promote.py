@@ -143,11 +143,18 @@ def run_metrics(evaluation: dict[str, Any], params: Params) -> dict[str, float]:
     return metrics | cost_usd(tokens, params)
 
 
+# Fichiers réécrits par le pipeline lui-même : ils ne rendent pas le code « sale ».
+PIPELINE_OUTPUTS = (":!dvc.lock", ":!metrics")
+
+
 def git_info() -> dict[str, str]:
+    """Commit courant et présence de modifications de code non commitées
+    (hors sorties du pipeline : un run issu de la CI doit être « propre »)."""
     def git(*args: str) -> str:
         return subprocess.run(["git", *args], cwd=PROJECT_ROOT, capture_output=True, text=True, check=True).stdout
     try:
-        return {"git_commit": git("rev-parse", "HEAD").strip(), "git_dirty": str(bool(git("status", "--porcelain").strip()))}
+        dirty = git("status", "--porcelain", "--untracked-files=no", "--", ".", *PIPELINE_OUTPUTS).strip()
+        return {"git_commit": git("rev-parse", "HEAD").strip(), "git_dirty": str(bool(dirty))}
     except (OSError, subprocess.CalledProcessError):
         return {"git_commit": "inconnu", "git_dirty": "inconnu"}
 
