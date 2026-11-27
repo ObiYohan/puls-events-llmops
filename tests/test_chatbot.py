@@ -358,3 +358,54 @@ def test_past_month_without_year_means_next_year(bot, monkeypatch):
     assert bot.extract_temporal_filter("expo en mars") == {"type": "month", "month": 3, "year": 2027}
     assert bot.extract_temporal_filter("expo en décembre") == {"type": "month", "month": 12, "year": 2026}
     assert bot.extract_temporal_filter("expo en mars 2026")["year"] == 2026
+
+
+# --- extract_location_filter -----------------------------------------------------
+
+@pytest.fixture
+def bot_cities(tmp_path):
+    events = [iso_event(f"e{i}", city=city) for i, city in enumerate(["Vence", "Aix-en-Provence", "Aix", "Nice"])]
+    index_path, chunks_path = write_artifacts(tmp_path, events)
+    return EventChatbot(index_path=str(index_path), chunks_path=str(chunks_path))
+
+
+@pytest.mark.parametrize(("query", "expected"), [
+    ("Des spectacles variés ce mois-ci", None),               # « var » dans « variés »
+    ("Un festival en Provence", None),                         # « vence » dans « provence »
+    ("Un concert à Vence", {"type": "city", "value": "Vence"}),
+    ("Expositions à Aix-en-Provence", {"type": "city", "value": "Aix-en-Provence"}),
+    ("Que faire dans le Var ?", {"type": "department_prefix", "value": "83"}),
+    ("Sortir à Nice", {"type": "city", "value": "Nice"}),
+])
+def test_location_filter_matches_whole_words_only(bot_cities, query, expected):
+    assert bot_cities.extract_location_filter(query) == expected
+
+
+# --- chat : aucune trace de la question (B7) -------------------------------------
+
+def test_chat_neither_prints_nor_logs_the_question(bot, capsys, caplog):
+    from types import SimpleNamespace
+
+    secret = "question confidentielle de Jeanne Dupont"
+    bot.client = SimpleNamespace(
+        embeddings=SimpleNamespace(create=lambda **_: SimpleNamespace(
+            data=[SimpleNamespace(embedding=[0.1] * DIMENSION)], usage=SimpleNamespace(prompt_tokens=7))),
+        chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_: SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="Voici un concert."))],
+            usage=SimpleNamespace(prompt_tokens=50, completion_tokens=5)))),
+    )
+    caplog.set_level("DEBUG")
+
+    result = bot.chat(secret)
+
+    assert result["response"] == "Voici un concert."
+    assert capsys.readouterr().out == ""
+    assert "Jeanne" not in caplog.text
+    assert bot.token_usage == {"embedding_tokens": 7, "prompt_tokens": 50, "completion_tokens": 5}
+
+
+def test_format_context_shows_department(tmp_path):
+    event = {**iso_event(), "location_department": "Vaucluse"}
+    index_path, chunks_path = write_artifacts(tmp_path, [event])
+    chatbot = EventChatbot(index_path=str(index_path), chunks_path=str(chunks_path))
+    assert "Département: Vaucluse" in chatbot.format_context(chatbot.chunks_df)

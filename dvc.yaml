@@ -66,3 +66,22 @@ stages:
     metrics:
       - ${paths.index_metrics}:
           cache: false
+
+  evaluate:
+    cmd: python -m src.pipeline.evaluate
+    deps:
+      - src/pipeline/evaluate.py
+      - src/chatbot.py
+      - src/llm.py
+      - ${paths.index_dir}
+      - ${paths.reference_set}
+    params:
+      - retrieval
+      - generation
+      - evaluation
+    outs:
+      - ${paths.eval_cases}
+    metrics:
+      # Scores moyens, seuils, validité et tokens consommés (génération + juge).
+      - ${paths.eval_metrics}:
+          cache: false

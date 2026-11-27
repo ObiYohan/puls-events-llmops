@@ -10,9 +10,18 @@ Secrets (variables d'environnement, sans valeur par défaut) :
 - ``AZURE_OPENAI_API_KEY`` : clé de la ressource.
 """
 
+import logging
+import time
+from collections.abc import Callable
+from typing import TypeVar
+
 from openai import APIConnectionError, OpenAI
 
 from src.config import get_secret
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 ENDPOINT_VAR = "AZURE_OPENAI_ENDPOINT"
 API_KEY_VAR = "AZURE_OPENAI_API_KEY"
@@ -64,3 +73,20 @@ def is_retryable(exc: Exception) -> bool:
     if code is not None:
         return code == 429 or code >= 500
     return isinstance(exc, APIConnectionError)
+
+
+def with_retry(call: Callable[[], T], *, max_retries: int, base_seconds: float, name: str = "llm_call") -> T:
+    """Exécute ``call`` avec backoff exponentiel (base, 2×base, 4×base…) sur les erreurs retentables."""
+    for attempt in range(max_retries + 1):
+        try:
+            return call()
+        except Exception as exc:
+            if not is_retryable(exc) or attempt == max_retries:
+                raise
+            delay = base_seconds * 2**attempt
+            logger.warning(
+                "llm_retry",
+                extra={"call": name, "attempt": attempt + 1, "status_code": status_code(exc), "delay_seconds": delay},
+            )
+            time.sleep(delay)
+    raise AssertionError("inatteignable")  # pragma: no cover

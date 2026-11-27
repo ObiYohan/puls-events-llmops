@@ -5,10 +5,13 @@ import numpy as np
 from datetime import datetime
 import re
 import unicodedata
+import logging
 
 from src.config import Params, get_params
 from src.llm import make_client
 from src.pipeline.build_index import CHUNKS_FILE, INDEX_FILE
+
+logger = logging.getLogger(__name__)
 
 DATE_COLUMNS = ('firstdate_begin', 'firstdate_end', 'lastdate_begin', 'lastdate_end')
 # Fuseau d'affichage des horaires (événements en région PACA).
@@ -20,6 +23,12 @@ def parse_dates(series: pd.Series) -> pd.Series:
     if pd.api.types.is_numeric_dtype(series):
         return pd.to_datetime(series, unit='ms', utc=True, errors='coerce')
     return pd.to_datetime(series, utc=True, errors='coerce', format='ISO8601')
+
+
+def contains_term(text: str, term: str) -> bool:
+    """Vrai si ``term`` apparaît comme mot entier (« var » absent de « variés »,
+    « vence » absent de « provence », « mars » absent de « marseille »)."""
+    return re.search(rf"(?<![\w-]){re.escape(term)}(?![\w-])", text) is not None
 
 
 def _local(value):
@@ -53,9 +62,6 @@ class EventChatbot:
                 f"Lancez `uv run dvc repro` (ou `dvc pull`) pour générer les chunks."
             )
         
-        print(f"📂 Chargement de l'index depuis : {index_path}")
-        print(f"📂 Chargement des chunks depuis : {chunks_path}")
-        
         self.index = faiss.read_index(str(index_path))
         # Identifiants et codes postaux restent du texte (zéro initial de 04, 05, 06).
         self.chunks_df = pd.read_json(chunks_path, dtype={'uid': str, 'location_postalcode': str})
@@ -72,20 +78,21 @@ class EventChatbot:
         
         current_date = pd.Timestamp.now(tz='UTC')
         future_events = self.chunks_df[self.chunks_df['lastdate_end'] >= current_date]
-        
-        print(f"\n📊 Statistiques des données :")
-        print(f"  - Total chunks : {len(self.chunks_df)}")
-        print(f"  - Événements futurs : {len(future_events['uid'].unique())} événements uniques")
-        print(f"  - Date la plus proche : {self.chunks_df['firstdate_begin'].min()}")
-        print(f"  - Date la plus lointaine : {self.chunks_df['lastdate_end'].max()}")
 
         self.available_cities = self._extract_available_cities()
         self.available_postal_codes = self._extract_available_postal_codes()
-        
-        print(f"📍 {len(self.available_cities)} villes détectées dans les données")
-        print(f"📮 {len(self.available_postal_codes)} codes postaux détectés")
-        
+
+        logger.info("chatbot_loaded", extra={
+            "index_path": str(index_path),
+            "n_chunks": len(self.chunks_df),
+            "n_future_events": int(future_events['uid'].nunique()),
+            "n_cities": len(self.available_cities),
+            "n_postal_codes": len(self.available_postal_codes),
+        })
+
         self.client = make_client()
+        # Tokens consommés depuis la création (embeddings des questions et génération).
+        self.token_usage = {"embedding_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0}
         
         self.system_prompt = """Tu es un assistant spécialisé dans la recommandation d'événements culturels.
 
@@ -123,7 +130,9 @@ class EventChatbot:
             model=self.params.embedding.model,
             input=[query]
         )
-        return np.array([query_res.data[0].embedding])
+        usage = getattr(query_res, "usage", None)
+        self.token_usage["embedding_tokens"] += int(getattr(usage, "prompt_tokens", 0) or 0)
+        return np.array([query_res.data[0].embedding], dtype=np.float32)
     
     def extract_temporal_filter(self, query):
         """Extrait les contraintes temporelles de la requête"""
@@ -137,7 +146,7 @@ class EventChatbot:
         
         for month_name, month_num in months_map.items():
             # Mot entier : « mars » ne doit pas être trouvé dans « Marseille ».
-            if re.search(rf'\b{month_name}\b', query_lower):
+            if contains_term(query_lower, month_name):
                 today = datetime.now()
                 year_match = re.search(r'\b(20\d{2})\b', query)
                 if year_match:
@@ -206,14 +215,17 @@ class EventChatbot:
         for dept_normalized, dept_prefix in DEPARTMENT_MAP.items():
             dept_n = unicodedata.normalize('NFD', dept_normalized)
             dept_n = ''.join(c for c in dept_n if unicodedata.category(c) != 'Mn')
-            if dept_n in query_normalized:
-                print(f"🗺️  Département détecté : {dept_normalized} → codes postaux {dept_prefix}xxx")
+            if contains_term(query_normalized, dept_n):
+                logger.debug("location_filter", extra={"type": "department", "value": dept_prefix})
                 return {'type': 'department_prefix', 'value': dept_prefix}
 
-        # 2. Chercher une ville dans la requête
-        for normalized_city, original_city in self.available_cities.items():
-            if normalized_city in query_normalized:
-                print(f"🏙️  Ville détectée : {original_city}")
+        # 2. Chercher une ville dans la requête (noms les plus longs d'abord :
+        #    « aix-en-provence » avant « aix »)
+        for normalized_city, original_city in sorted(
+            self.available_cities.items(), key=lambda item: len(item[0]), reverse=True
+        ):
+            if contains_term(query_normalized, normalized_city):
+                logger.debug("location_filter", extra={"type": "city", "value": original_city})
                 return {'type': 'city', 'value': original_city}
 
         # 3. Chercher un code postal explicite
@@ -221,10 +233,10 @@ class EventChatbot:
         if postal_match:
             postal_code = postal_match.group(1)
             if postal_code in self.available_postal_codes:
-                print(f"📮 Code postal détecté : {postal_code}")
+                logger.debug("location_filter", extra={"type": "postal", "value": postal_code})
                 return {'type': 'postal', 'value': postal_code}
             else:
-                print(f"⚠️  Code postal {postal_code} non trouvé dans les données")
+                logger.debug("postal_code_unknown", extra={"value": postal_code})
 
         return None
 
@@ -232,7 +244,7 @@ class EventChatbot:
         """Applique le filtre temporel sur un DataFrame."""
         month = temporal_filter['month']
         year = temporal_filter['year']
-        print(f"🗓️  Filtre temporel : {month}/{year}")
+        logger.debug("temporal_filter", extra={"month": month, "year": year})
         
         start_of_month = pd.Timestamp(year=year, month=month, day=1, tz='UTC')
         end_of_month = (
@@ -254,7 +266,6 @@ class EventChatbot:
         FIX #5 : Gestion du type 'department_prefix' pour filtrer par préfixe
         de code postal (ex: '84' filtre tous les codes 84000-84999).
         """
-        print(f"📍 Filtre géographique : {location_filter['value']}")
 
         if location_filter['type'] == 'city':
             return df[
@@ -331,7 +342,6 @@ class EventChatbot:
         # Partir des événements futurs uniquement
         current_date = pd.Timestamp.now(tz='UTC')
         filtered_df = self.chunks_df[self.chunks_df['lastdate_end'] >= current_date].copy()
-        print(f"📊 Événements futurs disponibles : {len(filtered_df['uid'].unique())} événements uniques")
         
         # FIX #1 : Appliquer les deux filtres de façon cumulative (et non exclusive)
         if temporal_filter and temporal_filter['type'] == 'month':
@@ -341,10 +351,9 @@ class EventChatbot:
             filtered_df = self._apply_location_filter(filtered_df, location_filter)
         
         unique_uids = filtered_df['uid'].unique()
-        print(f"✓ {len(unique_uids)} événements après filtrage")
+        logger.debug("events_after_filters", extra={"n_events": len(unique_uids)})
         
         if len(unique_uids) == 0:
-            print("⚠️  Aucun événement trouvé après filtrage")
             return pd.DataFrame(), np.array([])
         
         # FIX #2 : Toujours classer sémantiquement, même après filtrage
@@ -359,7 +368,7 @@ class EventChatbot:
             return "Aucun événement trouvé."
         
         if 'uid' not in chunks_df.columns:
-            print(f"⚠️ Colonnes disponibles : {chunks_df.columns.tolist()}")
+            logger.error("missing_uid_column", extra={"columns": chunks_df.columns.tolist()})
             return "Erreur : colonne 'uid' manquante dans les données."
         
         grouped = chunks_df.groupby('uid')
@@ -407,6 +416,8 @@ class EventChatbot:
                 location_info.append(f"Ville: {first_row['location_city']}")
             if 'location_postalcode' in first_row and pd.notna(first_row['location_postalcode']):
                 location_info.append(f"Code postal: {first_row['location_postalcode']}")
+            if 'location_department' in first_row and pd.notna(first_row['location_department']):
+                location_info.append(f"Département: {first_row['location_department']}")
             if 'location_phone' in first_row and pd.notna(first_row['location_phone']):
                 location_info.append(f"Téléphone: {first_row['location_phone']}")
             if 'location_website' in first_row and pd.notna(first_row['location_website']):
@@ -448,24 +459,38 @@ class EventChatbot:
             max_completion_tokens=generation.max_tokens
         )
         
+        usage = getattr(response, "usage", None)
+        self.token_usage["prompt_tokens"] += int(getattr(usage, "prompt_tokens", 0) or 0)
+        self.token_usage["completion_tokens"] += int(getattr(usage, "completion_tokens", 0) or 0)
         return response.choices[0].message.content
     
-    def chat(self, user_query, k=None, show_sources=True):
-        """Fonction principale du chatbot"""
-        print(f"\n🤖 Recherche d'événements pour : '{user_query}'")
-        
+    def chat(self, user_query, k=None):
+        """Recherche les événements pertinents et génère la réponse (aucun affichage).
+
+        La question n'est jamais journalisée en clair (CLAUDE.md, B7).
+        """
         relevant_chunks, distances = self.search_relevant_events(user_query, k=k)
         context = self.format_context(relevant_chunks)
-        
-        print("\n💭 Génération de la réponse...")
         response = self.generate_response(user_query, context)
-        
+        return {
+            "response": response,
+            "sources": relevant_chunks,
+            "distances": distances
+        }
+
+    @staticmethod
+    def print_answer(result, show_sources=True):
+        """Affiche une réponse et ses sources dans le terminal (mode interactif)."""
+        response = result["response"]
+        relevant_chunks = result["sources"]
+        distances = result["distances"]
+
         print("\n" + "="*80)
         print("RÉPONSE DU CHATBOT")
         print("="*80)
         print(response)
         
-        if show_sources:
+        if show_sources and len(relevant_chunks) > 0:
             print("\n" + "="*80)
             print("SOURCES UTILISÉES")
             print("="*80)
@@ -494,12 +519,6 @@ class EventChatbot:
                 if date_info:
                     print(f"   📅 {' | '.join(date_info)}")
                 print(f"   {full_text[:300]}...")
-        
-        return {
-            "response": response,
-            "sources": relevant_chunks,
-            "distances": distances
-        }
     
     def interactive_mode(self):
         """Mode interactif pour converser avec le chatbot"""
@@ -519,7 +538,7 @@ class EventChatbot:
                 continue
             
             try:
-                self.chat(user_input)
+                self.print_answer(self.chat(user_input))
             except Exception as e:
                 print(f"\n❌ Erreur : {e}")
             

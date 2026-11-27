@@ -11,6 +11,9 @@ paths:                         # relatifs à la racine du projet
   embed_metrics: metrics/embed.json
   index_dir: data/processed/index        # artefact servi par l'API : faiss.index + chunks.json + manifest.json
   index_metrics: metrics/build_index.json
+  reference_set: tests/eval/reference_set.json  # jeu de référence versionné dans Git
+  eval_metrics: metrics/evaluate.json
+  eval_cases: data/eval/cases.json      # détail par question (réponse, contexte, scores, raisons)
 
 ingest:
   # Jeu public « evenements-publics-openagenda » sur OpenDataSoft (sans clé d'API)
@@ -76,11 +79,19 @@ generation:
 
 evaluation:
   judge_model: gpt-5-mini      # distinct du générateur : évite l'auto-évaluation, quota séparé
-  judge_delay_seconds: 8.0     # délai minimal entre deux appels au juge
-  judge_max_retries: 5
-  delay_between_cases_seconds: 15.0
-  thresholds:                  # condition de mise en production (à recalibrer avec gpt-5-mini)
-    faithfulness: 0.8
-    answer_relevancy: 0.75
-    contextual_precision: 0.7
-    contextual_recall: 0.7
+  judge_reasoning_effort: low  # minimal | low | medium | high : qualité contre coût et latence du juge
+  max_workers: 4               # cas évalués en parallèle (quotas : juge 200k, génération 100k tokens/min)
+  max_retries: 5               # sur 429, 5xx et erreurs réseau
+  retry_base_seconds: 10.0     # délai doublé à chaque tentative
+  max_error_rate: 0.0          # part de métriques en erreur tolérée ; au-delà, l'évaluation est invalide
+  # Seuils plancher de mise en production, calibrés le 27/11/2026 avec le juge
+  # gpt-5-mini sur 3 évaluations complètes (24 questions). Moyennes observées :
+  # faithfulness 0,977–0,982 ; answer_relevancy 0,976–0,992 ;
+  # contextual_precision 0,912–0,953 ; contextual_recall 0,917–1,000.
+  # Écart entre deux exécutions identiques (bruit du juge) : jusqu'à 0,08.
+  # Seuil ≈ minimum observé − 0,1. À recalibrer si le juge ou le jeu de référence change.
+  thresholds:
+    faithfulness: 0.88
+    answer_relevancy: 0.88
+    contextual_precision: 0.80
+    contextual_recall: 0.82

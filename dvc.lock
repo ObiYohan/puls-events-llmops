@@ -64,8 +64,8 @@ stages:
       size: 4346458
     - path: src/pipeline/chunk.py
       hash: md5
-      md5: 90b7d063d8b66cd44f0d9ee9a15f1317
-      size: 7357
+      md5: 8ca1b73614035781420110d2e193112d
+      size: 7384
     - path: src/pipeline/utils.py
       hash: md5
       md5: 2ccc0ab16c8f0046616191d11dd8c7a1
@@ -87,8 +87,8 @@ stages:
     outs:
     - path: data/processed/chunks.json
       hash: md5
-      md5: 09f458982a7b430cc8d5c503e419c2a9
-      size: 2989730
+      md5: 31e92e6d6501bd41745921706ddbfa70
+      size: 3049783
     - path: metrics/chunk.json
       hash: md5
       md5: 8dc4b3822a41bd3abc58842a8e78fbc1
@@ -98,12 +98,12 @@ stages:
     deps:
     - path: data/processed/chunks.json
       hash: md5
-      md5: 09f458982a7b430cc8d5c503e419c2a9
-      size: 2989730
+      md5: 31e92e6d6501bd41745921706ddbfa70
+      size: 3049783
     - path: src/llm.py
       hash: md5
-      md5: 4d8b4edaa88fc8139c85fb5b1286680a
-      size: 2582
+      md5: af8084b7c947fcad5670f7883a34b1b2
+      size: 3481
     - path: src/pipeline/embed.py
       hash: md5
       md5: ddd309cbaa14e761a48cea47f749bebf
@@ -136,8 +136,8 @@ stages:
     deps:
     - path: data/processed/chunks.json
       hash: md5
-      md5: 09f458982a7b430cc8d5c503e419c2a9
-      size: 2989730
+      md5: 31e92e6d6501bd41745921706ddbfa70
+      size: 3049783
     - path: data/processed/embeddings
       hash: md5
       md5: 9500e477b0be9ada6d919bdb59f0f63f.dir
@@ -161,10 +161,64 @@ stages:
     outs:
     - path: data/processed/index
       hash: md5
-      md5: c1586094461e8f3250fd4567b7d83bd2.dir
-      size: 10921845
+      md5: bdb9706ab9ea0f4caccd5992f0438d33.dir
+      size: 10981898
       nfiles: 3
     - path: metrics/build_index.json
       hash: md5
       md5: 53b81c1e0a9367518a860e4b3a5b72a8
       size: 95
+  evaluate:
+    cmd: python -m src.pipeline.evaluate
+    deps:
+    - path: data/processed/index
+      hash: md5
+      md5: bdb9706ab9ea0f4caccd5992f0438d33.dir
+      size: 10981898
+      nfiles: 3
+    - path: src/chatbot.py
+      hash: md5
+      md5: aadaf6109ee77771d3d05bca9aa6547f
+      size: 26056
+    - path: src/llm.py
+      hash: md5
+      md5: af8084b7c947fcad5670f7883a34b1b2
+      size: 3481
+    - path: src/pipeline/evaluate.py
+      hash: md5
+      md5: 9044867843bfd3bb19508389344521c6
+      size: 11347
+    - path: tests/eval/reference_set.json
+      hash: md5
+      md5: bb2174d33f3d73307088d0a70b5a3668
+      size: 7722
+    params:
+      params.yaml:
+        evaluation:
+          judge_model: gpt-5-mini
+          judge_reasoning_effort: low
+          max_workers: 4
+          max_retries: 5
+          retry_base_seconds: 10.0
+          max_error_rate: 0.0
+          thresholds:
+            faithfulness: 0.88
+            answer_relevancy: 0.88
+            contextual_precision: 0.8
+            contextual_recall: 0.82
+        generation:
+          model: gpt-4.1-mini
+          temperature: 0.3
+          max_tokens: 1000
+        retrieval:
+          k: 5
+          candidate_factor: 10
+    outs:
+    - path: data/eval/cases.json
+      hash: md5
+      md5: e6f881afb2022fa5ecbb4203878f2ca7
+      size: 229835
+    - path: metrics/evaluate.json
+      hash: md5
+      md5: cd81bb63d61b68b2269eead2ed7cf79a
+      size: 688

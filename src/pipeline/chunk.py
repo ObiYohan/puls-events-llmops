@@ -31,7 +31,8 @@ logger = logging.getLogger(__name__)
 # Métadonnées de l'événement recopiées dans chaque chunk (utilisées par les filtres du chatbot).
 CHUNK_METADATA_FIELDS = (
     "firstdate_begin", "firstdate_end", "lastdate_begin", "lastdate_end",
-    "location_name", "location_city", "location_postalcode", "location_phone", "location_website",
+    "location_name", "location_city", "location_postalcode", "location_department",
+    "location_phone", "location_website",
 )
 
 FRENCH_MONTHS = (

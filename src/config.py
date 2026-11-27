@@ -9,6 +9,7 @@
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from dotenv import load_dotenv
@@ -33,6 +34,9 @@ class PathsParams(_Section):
     embed_metrics: Path
     index_dir: Path
     index_metrics: Path
+    reference_set: Path
+    eval_metrics: Path
+    eval_cases: Path
 
     @field_validator("*")
     @classmethod
@@ -115,9 +119,11 @@ class EvaluationThresholds(_Section):
 
 class EvaluationParams(_Section):
     judge_model: str
-    judge_delay_seconds: float = Field(ge=0)
-    judge_max_retries: int = Field(ge=1)
-    delay_between_cases_seconds: float = Field(ge=0)
+    judge_reasoning_effort: Literal["minimal", "low", "medium", "high"]
+    max_workers: int = Field(ge=1, le=16)
+    max_retries: int = Field(ge=0)
+    retry_base_seconds: float = Field(ge=0)
+    max_error_rate: float = Field(ge=0, le=1)
     thresholds: EvaluationThresholds
 
 

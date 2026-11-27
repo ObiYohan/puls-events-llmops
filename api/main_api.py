@@ -133,11 +133,7 @@ async def ask(request: QueryRequest):
     
     try:
         # Get chatbot response
-        result = chatbot_instance.chat(
-            request.query,
-            k=request.k,
-            show_sources=False
-        )
+        result = chatbot_instance.chat(request.query, k=request.k)
         
         # Format sources if requested
         sources = None
