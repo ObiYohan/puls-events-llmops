@@ -100,6 +100,21 @@ jobs:
           git pull --rebase origin "$BRANCH"
           git push origin "HEAD:$BRANCH"
 
+      # Après une promotion, l'API recharge le nouveau champion sans redéploiement.
+      - name: Recharger l'API
+        if: vars.API_URL != ''
+        env:
+          API_URL: ${{ vars.API_URL }}
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          if ! grep -q '"promote": true' metrics/promotion.json 2>/dev/null; then
+            echo "Pas de nouvelle version promue : rechargement inutile."
+            exit 0
+          fi
+          # --retry : laisse le temps au conteneur de redémarrer s'il était à l'arrêt.
+          curl -fsS --retry 4 --retry-delay 15 --retry-all-errors --max-time 180 \
+            -X POST "$API_URL/reload" -H "X-API-Key: $ADMIN_API_KEY"
+
       - name: Résumé
         if: always()
         run: uv run python -m src.pipeline.summary

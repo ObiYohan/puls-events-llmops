@@ -39,6 +39,7 @@ class PathsParams(_Section):
     eval_cases: Path
     system_prompt: Path
     promotion_report: Path
+    served_index_dir: Path
 
     @field_validator("*")
     @classmethod

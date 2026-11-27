@@ -35,6 +35,12 @@ def load_system_prompt(path) -> str:
     return text
 
 
+def strip_accents(text: str) -> str:
+    """« Décembre » → « Decembre » : les utilisateurs tapent souvent sans accents."""
+    decomposed = unicodedata.normalize('NFD', text)
+    return ''.join(c for c in decomposed if unicodedata.category(c) != 'Mn')
+
+
 def contains_term(text: str, term: str) -> bool:
     """Vrai si ``term`` apparaît comme mot entier (« var » absent de « variés »,
     « vence » absent de « provence », « mars » absent de « marseille »)."""
@@ -117,13 +123,13 @@ class EventChatbot:
         return np.array([query_res.data[0].embedding], dtype=np.float32)
     
     def extract_temporal_filter(self, query):
-        """Extrait les contraintes temporelles de la requête"""
-        query_lower = query.lower()
-        
+        """Extrait les contraintes temporelles de la requête (accents ignorés : « decembre »)."""
+        query_lower = strip_accents(query.lower())
+
         months_map = {
-            'janvier': 1, 'février': 2, 'mars': 3, 'avril': 4,
-            'mai': 5, 'juin': 6, 'juillet': 7, 'août': 8,
-            'septembre': 9, 'octobre': 10, 'novembre': 11, 'décembre': 12
+            'janvier': 1, 'fevrier': 2, 'mars': 3, 'avril': 4,
+            'mai': 5, 'juin': 6, 'juillet': 7, 'aout': 8,
+            'septembre': 9, 'octobre': 10, 'novembre': 11, 'decembre': 12
         }
         
         for month_name, month_num in months_map.items():

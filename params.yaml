@@ -16,6 +16,7 @@ paths:                         # relatifs à la racine du projet
   eval_cases: data/eval/cases.json      # détail par question (réponse, contexte, scores, raisons)
   system_prompt: src/prompts/system_prompt.txt  # prompt de génération (hash loggé dans MLflow)
   promotion_report: metrics/promotion.json
+  served_index_dir: data/served/index  # index champion téléchargé par l'API au démarrage
 
 ingest:
   # Jeu public « evenements-publics-openagenda » sur OpenDataSoft (sans clé d'API)

@@ -409,3 +409,13 @@ def test_format_context_shows_department(tmp_path):
     index_path, chunks_path = write_artifacts(tmp_path, [event])
     chatbot = EventChatbot(index_path=str(index_path), chunks_path=str(chunks_path))
     assert "Département: Vaucluse" in chatbot.format_context(chatbot.chunks_df)
+
+
+@pytest.mark.parametrize(("query", "month"), [
+    ("Une exposition à Marseille en decembre ?", 12),
+    ("Concerts en FÉVRIER", 2),
+    ("sortie en aout", 8),
+    ("sortie en août", 8),
+])
+def test_month_filter_ignores_accents_and_case(bot, query, month):
+    assert bot.extract_temporal_filter(query)["month"] == month

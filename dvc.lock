@@ -179,8 +179,8 @@ stages:
       nfiles: 3
     - path: src/chatbot.py
       hash: md5
-      md5: 6e4f26ba2a1592b1273c6863ce979ea0
-      size: 23343
+      md5: 2ffafbb34d0bafb0f40a5d43f835ce05
+      size: 23645
     - path: src/llm.py
       hash: md5
       md5: af8084b7c947fcad5670f7883a34b1b2
@@ -245,8 +245,8 @@ stages:
       size: 691
     - path: src/pipeline/promote.py
       hash: md5
-      md5: f9f74470d84de29efeb94a0174c1a47a
-      size: 10702
+      md5: 78eb798f866d415241282b52a0198441
+      size: 11073
     params:
       params.yaml:
         evaluation.thresholds:

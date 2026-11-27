@@ -1,35 +1,33 @@
+# API du chatbot Puls-Events.
+# Aucune donnée dans l'image : au démarrage, l'API télécharge l'index « champion »
+# du registre MLflow (src/serving.py). Secrets et configuration par variables
+# d'environnement (AZURE_OPENAI_*, MLFLOW_TRACKING_*, ADMIN_API_KEY, ALLOWED_ORIGINS).
+
 FROM python:3.13-slim
+
+COPY --from=ghcr.io/astral-sh/uv:0.12.6 /uv /usr/local/bin/uv
+
+ENV PYTHONUNBUFFERED=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    MLFLOW_DISABLE_AGENT_HINT=1
 
 WORKDIR /app
 
-# Installer les dépendances système
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Dépendances du projet seulement : ni DVC, ni DeepEval, ni outils de test.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-default-groups --no-install-project && rm -rf /root/.cache
 
-# Installer uv
-RUN pip install --no-cache-dir uv
-
-# Copier les fichiers de configuration
-COPY pyproject.toml uv.lock* ./
-
-# Créer un environnement virtuel et installer les dépendances
-RUN uv venv /opt/venv && \
-    . /opt/venv/bin/activate && \
-    uv pip install --no-cache .
-
-# Copier le code source
-COPY api/ ./api/
+COPY params.yaml ./
 COPY src/ ./src/
-COPY data/ ./data/
+COPY api/ ./api/
 
-# Exposer le port
+# Utilisateur sans privilèges ; seul data/ (index téléchargé) est inscriptible.
+RUN useradd --create-home --uid 10001 app \
+    && mkdir -p data \
+    && chown app:app data
+USER app
+
 EXPOSE 8000
-
-# Variables d'environnement
-ENV PATH="/opt/venv/bin:$PATH"
-ENV PYTHONUNBUFFERED=1
-
-# Commande de démarrage
-CMD ["python", "api/main_api.py"]
+CMD ["/app/.venv/bin/uvicorn", "api.main_api:app", "--host", "0.0.0.0", "--port", "8000"]

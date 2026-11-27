@@ -11,12 +11,9 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "faiss-cpu>=1.13.2",
     "fastapi>=0.136.1",
-    "langchain-text-splitters>=1.1.2",
     "pandas>=3.0.2",
     "tiktoken>=0.12.0",
-    "mistralai==1.12.4",
     "uvicorn>=0.30.0",
-    "dvc>=3.67.1",
     "pyyaml>=6.0.3",
     "pydantic>=2.13.3",
     "httpx>=0.28.1",
@@ -46,8 +43,13 @@ eval = [
     "deepeval>=4.3.5",
     "tabulate>=0.9.0",
 ]
+pipeline = [
+    "dvc>=3.67.1",
+    "langchain-text-splitters>=1.2.0",
+]
 
 [tool.uv]
-# `uv sync` installe aussi les outils de test et d'évaluation en local ;
-# l'image Docker n'installe que les dépendances du projet.
-default-groups = ["dev", "eval"]
+# `uv sync` installe tout (tests, évaluation, pipeline DVC) en local et en CI ;
+# l'image Docker de l'API n'installe que les dépendances du projet
+# (`uv sync --no-default-groups`) : ni DVC, ni DeepEval, ni outils de test.
+default-groups = ["dev", "eval", "pipeline"]

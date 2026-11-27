@@ -30,3 +30,13 @@ mlruns/
 mlartifacts/
 *.db
 *.log
+
+# Données : jamais dans l'image (l'index champion est téléchargé au démarrage)
+data/
+.dvc/cache/
+.dvc/tmp/
+.dvc/config.local
+metrics/
+reports/
+research_notes/
+logs/
