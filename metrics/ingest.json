@@ -1,1 +1,1 @@
-{"n_duplicates": 0, "n_kept": 1346, "n_received": 1364, "n_without_description": 18, "snapshot_date": "2026-11-27"}
+{"n_beyond_horizon": 66, "n_content_duplicates": 13, "n_duplicates": 0, "n_invalid_dates": 0, "n_kept": 1267, "n_past": 0, "n_received": 1364, "n_without_description": 18, "snapshot_date": "2026-11-27"}

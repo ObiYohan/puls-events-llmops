@@ -5,12 +5,12 @@ stages:
     deps:
     - path: src/pipeline/ingest.py
       hash: md5
-      md5: 5435f7daff7d489081cb734096edfdd2
-      size: 5328
+      md5: 70471dc5b28547c348f8a38e3c413b98
+      size: 8309
     - path: src/pipeline/utils.py
       hash: md5
-      md5: 2ccc0ab16c8f0046616191d11dd8c7a1
-      size: 1144
+      md5: 1bca65b860230911965057f3bec81852
+      size: 1107
     params:
       params.yaml:
         ingest:
@@ -20,6 +20,7 @@ stages:
           timeout_seconds: 120
           max_retries: 3
           retry_base_seconds: 5.0
+          max_days_ahead: 730
           fields:
           - uid
           - title_fr
@@ -49,27 +50,27 @@ stages:
     outs:
     - path: data/raw/events.json
       hash: md5
-      md5: d948421f1380a8784bc4baf4e68fb10b
-      size: 4346458
+      md5: e285f1ebfb20bd3b48a24b45c5a934f9
+      size: 4144256
     - path: metrics/ingest.json
       hash: md5
-      md5: 336a6782758d8515b9f446894068067f
-      size: 115
+      md5: 5824e949ac7da784d69de870d5b4e9c8
+      size: 202
   chunk:
     cmd: python -m src.pipeline.chunk
     deps:
     - path: data/raw/events.json
       hash: md5
-      md5: d948421f1380a8784bc4baf4e68fb10b
-      size: 4346458
+      md5: e285f1ebfb20bd3b48a24b45c5a934f9
+      size: 4144256
     - path: src/pipeline/chunk.py
       hash: md5
       md5: 8ca1b73614035781420110d2e193112d
       size: 7384
     - path: src/pipeline/utils.py
       hash: md5
-      md5: 2ccc0ab16c8f0046616191d11dd8c7a1
-      size: 1144
+      md5: 1bca65b860230911965057f3bec81852
+      size: 1107
     params:
       params.yaml:
         chunking:
@@ -87,31 +88,31 @@ stages:
     outs:
     - path: data/processed/chunks.json
       hash: md5
-      md5: 31e92e6d6501bd41745921706ddbfa70
-      size: 3049783
+      md5: 0bd8bddce1691b8f5e1bb3717893d162
+      size: 2790785
     - path: metrics/chunk.json
       hash: md5
-      md5: 8dc4b3822a41bd3abc58842a8e78fbc1
+      md5: b6f8c9fc47e8d73c1a80351ce6ff1c30
       size: 170
   embed:
     cmd: python -m src.pipeline.embed
     deps:
     - path: data/processed/chunks.json
       hash: md5
-      md5: 31e92e6d6501bd41745921706ddbfa70
-      size: 3049783
+      md5: 0bd8bddce1691b8f5e1bb3717893d162
+      size: 2790785
     - path: src/llm.py
       hash: md5
       md5: af8084b7c947fcad5670f7883a34b1b2
       size: 3481
     - path: src/pipeline/embed.py
       hash: md5
-      md5: ddd309cbaa14e761a48cea47f749bebf
-      size: 6873
+      md5: 97bc69059ec93850b51a0672f413e3a0
+      size: 6707
     - path: src/pipeline/utils.py
       hash: md5
-      md5: 2ccc0ab16c8f0046616191d11dd8c7a1
-      size: 1144
+      md5: 1bca65b860230911965057f3bec81852
+      size: 1107
     params:
       params.yaml:
         chunking.tokenizer: cl100k_base
@@ -124,24 +125,24 @@ stages:
     outs:
     - path: data/processed/embeddings
       hash: md5
-      md5: 9500e477b0be9ada6d919bdb59f0f63f.dir
-      size: 8510635
+      md5: 50cea98efedc741c9e508d452cecf69e.dir
+      size: 7914283
       nfiles: 3
     - path: metrics/embed.json
       hash: md5
-      md5: 26bf330d5fedbcb1c2d92246ded0b80c
+      md5: 2c00608da5dd1daa08bf7bfe3a43f5a6
       size: 150
   build_index:
     cmd: python -m src.pipeline.build_index
     deps:
     - path: data/processed/chunks.json
       hash: md5
-      md5: 31e92e6d6501bd41745921706ddbfa70
-      size: 3049783
+      md5: 0bd8bddce1691b8f5e1bb3717893d162
+      size: 2790785
     - path: data/processed/embeddings
       hash: md5
-      md5: 9500e477b0be9ada6d919bdb59f0f63f.dir
-      size: 8510635
+      md5: 50cea98efedc741c9e508d452cecf69e.dir
+      size: 7914283
       nfiles: 3
     - path: src/pipeline/build_index.py
       hash: md5
@@ -149,37 +150,37 @@ stages:
       size: 3127
     - path: src/pipeline/embed.py
       hash: md5
-      md5: ddd309cbaa14e761a48cea47f749bebf
-      size: 6873
+      md5: 97bc69059ec93850b51a0672f413e3a0
+      size: 6707
     - path: src/pipeline/utils.py
       hash: md5
-      md5: 2ccc0ab16c8f0046616191d11dd8c7a1
-      size: 1144
+      md5: 1bca65b860230911965057f3bec81852
+      size: 1107
     params:
       params.yaml:
         embedding.model: text-embedding-3-small
     outs:
     - path: data/processed/index
       hash: md5
-      md5: bdb9706ab9ea0f4caccd5992f0438d33.dir
-      size: 10981898
+      md5: 6770b91a0f5d9b3353d5d1d3add39ce3.dir
+      size: 10174210
       nfiles: 3
     - path: metrics/build_index.json
       hash: md5
-      md5: 53b81c1e0a9367518a860e4b3a5b72a8
+      md5: 5ea11d393d67a0262fd8809600539f23
       size: 95
   evaluate:
     cmd: python -m src.pipeline.evaluate
     deps:
     - path: data/processed/index
       hash: md5
-      md5: bdb9706ab9ea0f4caccd5992f0438d33.dir
-      size: 10981898
+      md5: 6770b91a0f5d9b3353d5d1d3add39ce3.dir
+      size: 10174210
       nfiles: 3
     - path: src/chatbot.py
       hash: md5
-      md5: c435358bf4e8551bdee15bfc11bc7e16
-      size: 23869
+      md5: 6e4f26ba2a1592b1273c6863ce979ea0
+      size: 23343
     - path: src/llm.py
       hash: md5
       md5: af8084b7c947fcad5670f7883a34b1b2
@@ -190,8 +191,8 @@ stages:
       size: 11347
     - path: src/prompts/system_prompt.txt
       hash: md5
-      md5: 88720452809633ecf62525745e395065
-      size: 1929
+      md5: d05a54f445de7d7740138fc8fb7526e7
+      size: 1900
     - path: tests/eval/reference_set.json
       hash: md5
       md5: bb2174d33f3d73307088d0a70b5a3668
@@ -200,7 +201,7 @@ stages:
       params.yaml:
         evaluation:
           judge_model: gpt-5-mini
-          judge_reasoning_effort: minimal
+          judge_reasoning_effort: low
           max_workers: 4
           max_retries: 5
           retry_base_seconds: 10.0
@@ -220,32 +221,32 @@ stages:
     outs:
     - path: data/eval/cases.json
       hash: md5
-      md5: 7c8920ca81556372d0d6d4ac9be8241b
-      size: 229089
+      md5: 154d6cb253d0921ceb3954ef868af3b7
+      size: 227195
     - path: metrics/evaluate.json
       hash: md5
-      md5: 7b13ef8f9a41fe12d7a26fbc719ee14b
-      size: 690
+      md5: b4955a57538a1ec3fc7fa386296492b4
+      size: 691
   promote:
     cmd: python -m src.pipeline.promote
     deps:
     - path: data/eval/cases.json
       hash: md5
-      md5: 7c8920ca81556372d0d6d4ac9be8241b
-      size: 229089
+      md5: 154d6cb253d0921ceb3954ef868af3b7
+      size: 227195
     - path: data/processed/index
       hash: md5
-      md5: bdb9706ab9ea0f4caccd5992f0438d33.dir
-      size: 10981898
+      md5: 6770b91a0f5d9b3353d5d1d3add39ce3.dir
+      size: 10174210
       nfiles: 3
     - path: metrics/evaluate.json
       hash: md5
-      md5: 7b13ef8f9a41fe12d7a26fbc719ee14b
-      size: 690
+      md5: b4955a57538a1ec3fc7fa386296492b4
+      size: 691
     - path: src/pipeline/promote.py
       hash: md5
-      md5: ea0b6d026978ba43729751a28cfd9b37
-      size: 10452
+      md5: f9f74470d84de29efeb94a0174c1a47a
+      size: 10702
     params:
       params.yaml:
         evaluation.thresholds:
@@ -272,5 +273,5 @@ stages:
     outs:
     - path: metrics/promotion.json
       hash: md5
-      md5: ab690c8a8bf88b4033961f82377fb28b
-      size: 238
+      md5: 9b978009dc3b25267f31c047efb88de1
+      size: 300

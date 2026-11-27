@@ -1,1 +1,1 @@
-{"chunk_tokens_max": 507, "chunk_tokens_mean": 184.8, "chunk_tokens_total": 278107, "n_chunks": 1505, "n_events": 1346, "n_events_without_chunk": 0, "n_split_events": 68}
+{"chunk_tokens_max": 507, "chunk_tokens_mean": 180.7, "chunk_tokens_total": 252473, "n_chunks": 1397, "n_events": 1267, "n_events_without_chunk": 0, "n_split_events": 55}
