@@ -1,0 +1,1 @@
+{"model": "text-embedding-3-small", "n_api_calls": 1, "n_chunks": 1505, "n_embedded": 3, "n_reused": 1367, "n_unique_texts": 1370, "prompt_tokens": 188}

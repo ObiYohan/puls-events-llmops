@@ -50,16 +50,19 @@ ingest:
     - location_website
 
 chunking:
-  tokenizer: cl100k_base       # encodage tiktoken utilisé pour compter les tokens
+  strip_html: true             # convertit le HTML des descriptions en texte (≈ -12 % de tokens)
+  tokenizer: cl100k_base      # encodage tiktoken utilisé pour compter les tokens
   split_threshold: 512         # une description de plus de N tokens est découpée...
   chunk_size: 400              # ...en chunks d'au plus N tokens
   chunk_overlap: 50
   separators: ["\n\n", "\n", ". ", " ", ""]
 
+# Modèles servis par Azure OpenAI (France Central) : chaque nom de modèle est
+# aussi le nom de son déploiement Azure.
 embedding:
-  model: mistral-embed
-  max_tokens_per_batch: 7000
-  pause_seconds: 2.0           # pause entre deux lots (quotas Mistral)
+  model: text-embedding-3-small  # 1 536 dimensions ; tokenizer cl100k_base
+  max_tokens_per_batch: 20000  # quota du déploiement : 1M tokens/min
+  pause_seconds: 0.5           # pause entre deux lots
   max_retries: 5               # sur 429, 5xx et erreurs réseau
   retry_base_seconds: 10.0     # délai doublé à chaque tentative : 10, 20, 40, 80, 160 s
   rate_limit_pause_seconds: 60.0  # utilisé par l'ancien load_new_data.py (supprimé à l'étape 3)
@@ -69,16 +72,16 @@ retrieval:
   candidate_factor: 10         # chunks candidats = k × facteur, avant déduplication par événement
 
 generation:
-  model: mistral-small-latest  # remplace open-mistral-7b codé en dur dans Projet_7
+  model: gpt-4.1-mini          # remplace open-mistral-7b codé en dur dans Projet_7
   temperature: 0.3
   max_tokens: 1000
 
 evaluation:
-  judge_model: mistral-large-latest
+  judge_model: gpt-5-mini      # distinct du générateur : évite l'auto-évaluation, quota séparé
   judge_delay_seconds: 8.0     # délai minimal entre deux appels au juge
   judge_max_retries: 5
   delay_between_cases_seconds: 15.0
-  thresholds:                  # condition de mise en production
+  thresholds:                  # condition de mise en production (à recalibrer avec gpt-5-mini)
     faithfulness: 0.8
     answer_relevancy: 0.75
     contextual_precision: 0.7

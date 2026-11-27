@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import httpx
 import numpy as np
+import openai
 import pytest
 
 from src.pipeline import embed
@@ -9,21 +10,21 @@ from src.pipeline.utils import read_json, text_hash, write_json
 
 
 class FakeEmbeddings:
-    """Imite client.embeddings de Mistral : vecteur = [longueur du texte, 1.0]."""
+    """Imite client.embeddings du SDK OpenAI : vecteur = [longueur du texte, 1.0]."""
 
     def __init__(self, errors=()):
         self.calls = []
         self.errors = list(errors)
 
-    def create(self, model, inputs):
-        self.calls.append(list(inputs))
+    def create(self, model, input):
+        self.calls.append(list(input))
         if self.errors:
             error = self.errors.pop(0)
             if error is not None:
                 raise error
         # Ordre volontairement inversé : le code doit trier par index.
-        data = [SimpleNamespace(index=i, embedding=[float(len(t)), 1.0]) for i, t in enumerate(inputs)][::-1]
-        return SimpleNamespace(data=data, usage=SimpleNamespace(prompt_tokens=10 * len(inputs)))
+        data = [SimpleNamespace(index=i, embedding=[float(len(t)), 1.0]) for i, t in enumerate(input)][::-1]
+        return SimpleNamespace(data=data, usage=SimpleNamespace(prompt_tokens=10 * len(input)))
 
 
 def fake_client(errors=()):
@@ -31,11 +32,11 @@ def fake_client(errors=()):
 
 
 class StatusError(Exception):
-    """Erreur portant un code HTTP, comme mistralai.models.SDKError (via raw_response)."""
+    """Erreur portant un code HTTP, comme openai.APIStatusError."""
 
     def __init__(self, status_code):
         super().__init__(f"HTTP {status_code}")
-        self.raw_response = SimpleNamespace(status_code=status_code)
+        self.status_code = status_code
 
 
 def make_chunk(text):
@@ -69,26 +70,13 @@ def test_make_batches_empty():
     assert embed.make_batches([], max_tokens=100) == []
 
 
-# --- is_retryable ------------------------------------------------------------
-
-@pytest.mark.parametrize(("error", "expected"), [
-    (StatusError(429), True),
-    (StatusError(503), True),
-    (StatusError(401), False),
-    (StatusError(400), False),
-    (httpx.ConnectError("down"), True),
-    (ValueError("bug"), False),
-])
-def test_is_retryable(error, expected):
-    assert embed.is_retryable(error) is expected
-
-
 # --- embed_batch -------------------------------------------------------------
 
 def test_embed_batch_retries_with_exponential_backoff(params, monkeypatch):
     delays = []
     monkeypatch.setattr(embed.time, "sleep", delays.append)
-    client = fake_client(errors=[StatusError(429), httpx.ReadTimeout("slow"), None])
+    timeout = openai.APITimeoutError(request=httpx.Request("POST", "https://test"))
+    client = fake_client(errors=[StatusError(429), timeout, None])
 
     vectors, tokens = embed.embed_batch(client, ["ab", "abc"], params.embedding)
 
@@ -195,9 +183,9 @@ def test_partial_progress_is_saved_when_a_batch_fails(params, monkeypatch):
 
 
 def test_missing_api_key_fails_only_if_something_to_embed(params, monkeypatch):
-    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
     write_chunks(params, ["a"])
-    with pytest.raises(RuntimeError, match="MISTRAL_API_KEY"):
+    with pytest.raises(RuntimeError, match="AZURE_OPENAI_API_KEY"):
         embed.run()
 
     embed.run(fake_client())

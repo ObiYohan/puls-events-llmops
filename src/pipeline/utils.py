@@ -28,7 +28,7 @@ def _encoding(name: str) -> tiktoken.Encoding:
 
 
 def count_tokens(text: str, encoding_name: str) -> int:
-    """Nombre de tokens selon l'encodage tiktoken donné (approximation du tokenizer Mistral)."""
+    """Nombre de tokens selon l'encodage tiktoken donné (celui de text-embedding-3-small pour cl100k_base)."""
     return len(_encoding(encoding_name).encode(text))
 
 

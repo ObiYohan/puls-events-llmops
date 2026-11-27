@@ -9,7 +9,6 @@ services:
     env_file:
       - .env
     environment:
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - PYTHONUNBUFFERED=1
     volumes:
       - ./logs:/app/logs:rw

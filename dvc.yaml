@@ -36,13 +36,14 @@ stages:
     deps:
       - src/pipeline/embed.py
       - src/pipeline/utils.py
+      - src/llm.py
       - ${paths.chunks_dataset}
     params:
       - embedding
       - chunking.tokenizer
     outs:
       # Le dossier sert aussi de cache : DVC ne le vide pas avant l'exécution,
-      # seuls les chunks nouveaux ou modifiés sont envoyés à l'API Mistral.
+      # seuls les chunks nouveaux ou modifiés sont envoyés à l'API Azure OpenAI.
       - ${paths.embeddings}:
           persist: true
     metrics:

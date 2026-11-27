@@ -33,5 +33,7 @@ def setup_logging(level: int = logging.INFO) -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level)
-    # httpx journalise chaque requête en INFO : trop bavard pour le pipeline.
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    # httpx (et httpx2, utilisé par le SDK OpenAI) journalisent chaque requête en
+    # INFO : trop bavard pour le pipeline.
+    for name in ("httpx", "httpx2"):
+        logging.getLogger(name).setLevel(logging.WARNING)

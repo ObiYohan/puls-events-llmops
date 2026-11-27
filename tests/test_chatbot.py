@@ -46,7 +46,7 @@ def test_init_with_valid_paths(tmp_path):
     assert 'text' in chatbot.chunks_df.columns
     assert chatbot.available_cities is not None
     assert chatbot.available_postal_codes is not None
-    assert chatbot.mistral is not None
+    assert chatbot.client is not None
 
 def test_init_raises_error_when_index_path_does_not_exist(tmp_path):
     """Test that FileNotFoundError is raised when index_path does not exist"""

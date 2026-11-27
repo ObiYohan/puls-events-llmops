@@ -1,4 +1,3 @@
-from mistralai import Mistral
 import os
 import pandas as pd
 import faiss
@@ -7,7 +6,8 @@ from datetime import datetime
 import re
 import unicodedata
 
-from src.config import Params, get_params, get_secret
+from src.config import Params, get_params
+from src.llm import make_client
 
 
 class EventChatbot:
@@ -66,7 +66,7 @@ class EventChatbot:
         print(f"📍 {len(self.available_cities)} villes détectées dans les données")
         print(f"📮 {len(self.available_postal_codes)} codes postaux détectés")
         
-        self.mistral = Mistral(api_key=get_secret("MISTRAL_API_KEY"))
+        self.client = make_client()
         
         self.system_prompt = """Tu es un assistant spécialisé dans la recommandation d'événements culturels.
 
@@ -100,9 +100,9 @@ class EventChatbot:
 
     def vectorize_query(self, query):
         """Vectorise la requête utilisateur"""
-        query_res = self.mistral.embeddings.create(
+        query_res = self.client.embeddings.create(
             model=self.params.embedding.model,
-            inputs=[query]
+            input=[query]
         )
         return np.array([query_res.data[0].embedding])
     
@@ -407,7 +407,7 @@ class EventChatbot:
 
         
     def generate_response(self, query, context):
-        """Génère une réponse augmentée avec Mistral"""
+        """Génère une réponse augmentée avec le modèle de génération"""
         current_date = datetime.now().strftime("%d/%m/%Y")
         full_prompt = self.system_prompt.format(
             current_date=current_date,
@@ -415,14 +415,14 @@ class EventChatbot:
         )
         
         generation = self.params.generation
-        response = self.mistral.chat.complete(
+        response = self.client.chat.completions.create(
             model=generation.model,
             messages=[
                 {"role": "system", "content": full_prompt},
                 {"role": "user", "content": query}
             ],
             temperature=generation.temperature,
-            max_tokens=generation.max_tokens
+            max_completion_tokens=generation.max_tokens
         )
         
         return response.choices[0].message.content

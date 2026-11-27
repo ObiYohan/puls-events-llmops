@@ -1,6 +1,7 @@
 """Étape DVC « chunk » : découpage des descriptions en chunks prêts à encoder.
 
 Reprend la logique de Projet_7 :
+- le HTML des descriptions est converti en texte (si ``chunking.strip_html``) ;
 - une description courte (≤ ``chunking.split_threshold`` tokens) reste un seul chunk ;
 - une description longue est découpée en chunks de ``chunking.chunk_size`` tokens ;
 - chaque chunk porte les métadonnées de date et de lieu de son événement ;
@@ -13,8 +14,10 @@ Usage : ``uv run python -m src.pipeline.chunk`` (ou ``uv run dvc repro chunk``).
 """
 
 import logging
+import re
 import statistics
 from datetime import datetime
+from html.parser import HTMLParser
 from typing import Any
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -35,6 +38,56 @@ FRENCH_MONTHS = (
     "janvier", "février", "mars", "avril", "mai", "juin",
     "juillet", "août", "septembre", "octobre", "novembre", "décembre",
 )
+
+
+# --- Nettoyage HTML -----------------------------------------------------------
+
+# Balises de bloc : remplacées par des sauts de ligne pour garder la structure
+# (le splitter coupe en priorité sur "\n\n" puis "\n").
+_PARAGRAPH_TAGS = {"p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "pre", "table", "blockquote"}
+_LINE_TAGS = {"br", "hr", "tr"}
+_SKIPPED_TAGS = {"script", "style"}
+
+
+class _TextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)  # &amp; &nbsp; … décodés automatiquement
+        self.parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list) -> None:
+        if tag in _SKIPPED_TAGS:
+            self._skip_depth += 1
+        elif tag == "li":
+            self.parts.append("\n- ")
+        elif tag in _PARAGRAPH_TAGS:
+            self.parts.append("\n\n")
+        elif tag in _LINE_TAGS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in _SKIPPED_TAGS:
+            self._skip_depth = max(0, self._skip_depth - 1)
+        elif tag in _PARAGRAPH_TAGS:
+            self.parts.append("\n\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip_depth:
+            self.parts.append(data)
+
+
+def html_to_text(html: str) -> str:
+    """Convertit une description HTML en texte brut structuré (paragraphes, puces).
+
+    Les liens gardent leur texte (l'URL est déjà dans ``location_website``) ;
+    les espaces sont normalisés et les lignes vides multiples réduites à une.
+    """
+    parser = _TextExtractor()
+    parser.feed(html)
+    parser.close()
+    text = "".join(parser.parts).replace("\xa0", " ")
+    lines = [re.sub(r"[ \t\r\f\v]+", " ", line).strip() for line in text.split("\n")]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
 def _present(value: Any) -> bool:
@@ -71,8 +124,16 @@ def make_splitter(params: ChunkingParams) -> RecursiveCharacterTextSplitter:
 def chunk_event(
     event: dict[str, Any], params: ChunkingParams, splitter: RecursiveCharacterTextSplitter
 ) -> list[dict[str, Any]]:
-    """Découpe un événement en un ou plusieurs chunks porteurs de ses métadonnées."""
+    """Découpe un événement en un ou plusieurs chunks porteurs de ses métadonnées.
+
+    Renvoie une liste vide si la description est vide après nettoyage.
+    """
     description = event["longdescription_fr"]
+    if params.strip_html:
+        description = html_to_text(description)
+    if not description:
+        logger.warning("empty_description_after_cleaning", extra={"uid": str(event["uid"])})
+        return []
     if count_tokens(description, params.tokenizer) <= params.split_threshold:
         texts = [description]
     else:
@@ -105,6 +166,7 @@ def compute_metrics(events: list[dict[str, Any]], chunks: list[dict[str, Any]]) 
     tokens = [c["token_count"] for c in chunks]
     return {
         "n_events": len(events),
+        "n_events_without_chunk": len(events) - len({c["uid"] for c in chunks}),
         "n_chunks": len(chunks),
         "n_split_events": len({c["uid"] for c in chunks if c["chunk_id"] > 0}),
         "chunk_tokens_mean": round(statistics.fmean(tokens), 1) if tokens else 0.0,

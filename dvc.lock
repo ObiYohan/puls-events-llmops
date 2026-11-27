@@ -5,8 +5,12 @@ stages:
     deps:
     - path: src/pipeline/ingest.py
       hash: md5
-      md5: 15fdf1b6b69e03e254c55e495473e27f
-      size: 5408
+      md5: 5435f7daff7d489081cb734096edfdd2
+      size: 5328
+    - path: src/pipeline/utils.py
+      hash: md5
+      md5: 2ccc0ab16c8f0046616191d11dd8c7a1
+      size: 1144
     params:
       params.yaml:
         ingest:
@@ -45,30 +49,31 @@ stages:
     outs:
     - path: data/raw/events.json
       hash: md5
-      md5: 53fa51717d87d2d230ff94cdd293dc99
-      size: 4485564
+      md5: d948421f1380a8784bc4baf4e68fb10b
+      size: 4346458
     - path: metrics/ingest.json
       hash: md5
-      md5: 53701c9ff06424ff2cfc67c381c4742a
+      md5: 336a6782758d8515b9f446894068067f
       size: 115
   chunk:
     cmd: python -m src.pipeline.chunk
     deps:
     - path: data/raw/events.json
       hash: md5
-      md5: 53fa51717d87d2d230ff94cdd293dc99
-      size: 4485564
+      md5: d948421f1380a8784bc4baf4e68fb10b
+      size: 4346458
     - path: src/pipeline/chunk.py
       hash: md5
-      md5: 6661f583b567613c67100c645d7b4f45
-      size: 5004
+      md5: 90b7d063d8b66cd44f0d9ee9a15f1317
+      size: 7357
     - path: src/pipeline/utils.py
       hash: md5
-      md5: 05504ca34eae99c071a1ef8262aff2ac
-      size: 1093
+      md5: 2ccc0ab16c8f0046616191d11dd8c7a1
+      size: 1144
     params:
       params.yaml:
         chunking:
+          strip_html: true
           tokenizer: cl100k_base
           split_threshold: 512
           chunk_size: 400
@@ -82,9 +87,48 @@ stages:
     outs:
     - path: data/processed/chunks.json
       hash: md5
-      md5: b99c22c840c304c492085151e380f619
-      size: 3352501
+      md5: 09f458982a7b430cc8d5c503e419c2a9
+      size: 2989730
     - path: metrics/chunk.json
       hash: md5
-      md5: be44386c1d98323a0f8f9a4850ef2a00
-      size: 142
+      md5: 8dc4b3822a41bd3abc58842a8e78fbc1
+      size: 170
+  embed:
+    cmd: python -m src.pipeline.embed
+    deps:
+    - path: data/processed/chunks.json
+      hash: md5
+      md5: 09f458982a7b430cc8d5c503e419c2a9
+      size: 2989730
+    - path: src/llm.py
+      hash: md5
+      md5: 4d8b4edaa88fc8139c85fb5b1286680a
+      size: 2582
+    - path: src/pipeline/embed.py
+      hash: md5
+      md5: ddd309cbaa14e761a48cea47f749bebf
+      size: 6873
+    - path: src/pipeline/utils.py
+      hash: md5
+      md5: 2ccc0ab16c8f0046616191d11dd8c7a1
+      size: 1144
+    params:
+      params.yaml:
+        chunking.tokenizer: cl100k_base
+        embedding:
+          model: text-embedding-3-small
+          max_tokens_per_batch: 20000
+          pause_seconds: 0.5
+          max_retries: 5
+          retry_base_seconds: 10.0
+          rate_limit_pause_seconds: 60.0
+    outs:
+    - path: data/processed/embeddings
+      hash: md5
+      md5: 9500e477b0be9ada6d919bdb59f0f63f.dir
+      size: 8510635
+      nfiles: 3
+    - path: metrics/embed.json
+      hash: md5
+      md5: 7806b4ffd6100205bcce809e61dbfdce
+      size: 152

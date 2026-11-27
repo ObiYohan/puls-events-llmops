@@ -74,6 +74,7 @@ class IngestParams(_Section):
 
 
 class ChunkingParams(_Section):
+    strip_html: bool
     tokenizer: str
     split_threshold: int = Field(gt=0)
     chunk_size: int = Field(gt=0)

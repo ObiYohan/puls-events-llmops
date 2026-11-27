@@ -29,6 +29,40 @@ def long_description(n_sentences=400):
     return " ".join(f"Phrase numéro {i} décrivant le programme du festival." for i in range(n_sentences))
 
 
+# --- html_to_text ------------------------------------------------------------
+
+def test_html_to_text_keeps_paragraphs_and_lists():
+    html = "<h2>Programme</h2><p>Concert de <strong>jazz</strong>.</p><ul><li>20h : ouverture</li><li>21h : concert</li></ul>"
+    assert chunk.html_to_text(html) == "Programme\n\nConcert de jazz.\n\n- 20h : ouverture\n- 21h : concert"
+
+
+def test_html_to_text_decodes_entities_and_normalizes_spaces():
+    html = "<p>Tom&nbsp;&amp;&nbsp;Jerry   au<br>théâtre &gt; salle 2</p>"
+    assert chunk.html_to_text(html) == "Tom & Jerry au\nthéâtre > salle 2"
+
+
+def test_html_to_text_keeps_link_text_and_drops_scripts():
+    html = '<p>Réservez sur <a href="https://example.org">notre site</a>.</p><script>alert(1)</script>'
+    assert chunk.html_to_text(html) == "Réservez sur notre site."
+
+
+def test_html_to_text_leaves_plain_text_unchanged():
+    assert chunk.html_to_text("Concert de jazz.\n\nEntrée libre.") == "Concert de jazz.\n\nEntrée libre."
+
+
+def test_strip_html_param_controls_cleaning(chunking):
+    html_event = event(description="<p>Concert de <em>jazz</em></p>")
+    cleaned = chunk.chunk_event(html_event, chunking, chunk.make_splitter(chunking))[0]["text"]
+    raw_params = chunking.model_copy(update={"strip_html": False})
+    raw = chunk.chunk_event(html_event, raw_params, chunk.make_splitter(raw_params))[0]["text"]
+    assert cleaned == "Concert de jazz"
+    assert raw == "<p>Concert de <em>jazz</em></p>"
+
+
+def test_event_empty_after_cleaning_gives_no_chunk(chunking):
+    assert chunk.chunk_event(event(description="<p> </p><br>"), chunking, chunk.make_splitter(chunking)) == []
+
+
 # --- enriched_text -----------------------------------------------------------
 
 def test_enriched_text_adds_city_place_and_french_month():
@@ -99,14 +133,17 @@ def test_hash_changes_with_enriched_metadata(chunking):
 
 def test_run_writes_sorted_chunks_and_metrics(isolated_params, monkeypatch):
     monkeypatch.setattr(chunk, "get_params", lambda: isolated_params)
-    write_json(isolated_params.paths.raw_events, [event("b", description=long_description()), event("a")])
+    write_json(isolated_params.paths.raw_events, [
+        event("b", description=long_description()), event("a"), event("c", description="<p></p>"),
+    ])
 
     metrics = chunk.run()
 
     chunks = read_json(isolated_params.paths.chunks_dataset)
     assert [(c["uid"], c["chunk_id"]) for c in chunks][:2] == [("a", 0), ("b", 0)]
     assert read_json(isolated_params.paths.chunk_metrics) == metrics
-    assert metrics["n_events"] == 2
+    assert metrics["n_events"] == 3
+    assert metrics["n_events_without_chunk"] == 1
     assert metrics["n_chunks"] == len(chunks)
     assert metrics["n_split_events"] == 1
     assert metrics["chunk_tokens_max"] <= isolated_params.chunking.split_threshold
