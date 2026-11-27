@@ -121,7 +121,6 @@ stages:
           pause_seconds: 0.5
           max_retries: 5
           retry_base_seconds: 10.0
-          rate_limit_pause_seconds: 60.0
     outs:
     - path: data/processed/embeddings
       hash: md5
@@ -130,5 +129,42 @@ stages:
       nfiles: 3
     - path: metrics/embed.json
       hash: md5
-      md5: 7806b4ffd6100205bcce809e61dbfdce
-      size: 152
+      md5: 26bf330d5fedbcb1c2d92246ded0b80c
+      size: 150
+  build_index:
+    cmd: python -m src.pipeline.build_index
+    deps:
+    - path: data/processed/chunks.json
+      hash: md5
+      md5: 09f458982a7b430cc8d5c503e419c2a9
+      size: 2989730
+    - path: data/processed/embeddings
+      hash: md5
+      md5: 9500e477b0be9ada6d919bdb59f0f63f.dir
+      size: 8510635
+      nfiles: 3
+    - path: src/pipeline/build_index.py
+      hash: md5
+      md5: 7d1695c5778afc5784d27f75ee7ae469
+      size: 3127
+    - path: src/pipeline/embed.py
+      hash: md5
+      md5: ddd309cbaa14e761a48cea47f749bebf
+      size: 6873
+    - path: src/pipeline/utils.py
+      hash: md5
+      md5: 2ccc0ab16c8f0046616191d11dd8c7a1
+      size: 1144
+    params:
+      params.yaml:
+        embedding.model: text-embedding-3-small
+    outs:
+    - path: data/processed/index
+      hash: md5
+      md5: c1586094461e8f3250fd4567b7d83bd2.dir
+      size: 10921845
+      nfiles: 3
+    - path: metrics/build_index.json
+      hash: md5
+      md5: 53b81c1e0a9367518a860e4b3a5b72a8
+      size: 95

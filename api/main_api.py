@@ -4,30 +4,31 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from contextlib import asynccontextmanager
+import secrets
 import sys
 import os
-import subprocess
-import faiss
 
 # Add parent directory to path to import chatbot
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.chatbot import EventChatbot
-from src.config import get_params
+from src.config import get_params, get_secret
+from src.pipeline.build_index import CHUNKS_FILE, INDEX_FILE
 
 # Global chatbot instance
 chatbot_instance = None
 
-# Security: API Key for sensitive endpoints
-API_KEY = os.getenv("API_KEY", "your-super-secret-key-change-me-in-production")
+# Sécurité : clé d'administration lue dans ADMIN_API_KEY, sans valeur par défaut.
+# Si elle est absente, les endpoints protégés sont désactivés.
+ADMIN_KEY_VAR = "ADMIN_API_KEY"
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 async def verify_api_key(api_key: str = Security(api_key_header)):
-    """Verify API key for protected endpoints"""
-    if api_key != API_KEY:
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid or missing API key"
-        )
+    """Vérifie la clé d'administration des endpoints protégés."""
+    expected = get_secret(ADMIN_KEY_VAR)
+    if expected is None:
+        raise HTTPException(status_code=503, detail="Endpoint d'administration désactivé")
+    if api_key is None or not secrets.compare_digest(api_key, expected):
+        raise HTTPException(status_code=403, detail="Clé d'API invalide ou absente")
     return api_key
 
 @asynccontextmanager
@@ -89,7 +90,7 @@ class HealthResponse(BaseModel):
     chatbot_loaded: bool
     index_size: Optional[int] = None
 
-class RebuildResponse(BaseModel):
+class ReloadResponse(BaseModel):
     status: str
     message: str
     index_size: int
@@ -165,63 +166,28 @@ async def ask(request: QueryRequest):
             detail=f"Error processing query: {str(e)}"
         )
 
-# Rebuild vector database
-@app.post("/rebuild", response_model=RebuildResponse, tags=["System"])
-async def rebuild_index(api_key: str = Depends(verify_api_key)):
-    """
-    Rebuild the FAISS index with new data (requires API key)
-    
-    **Important**: Place your new data file at `data/new-data.json` before calling this endpoint.
+# Recharge l'index depuis le disque (après `dvc pull` ou un nouveau build)
+@app.post("/reload", response_model=ReloadResponse, tags=["System"])
+async def reload_index(api_key: str = Depends(verify_api_key)):
+    """Recharge l'index FAISS et les chunks (clé d'administration requise).
+
+    L'index est construit par le pipeline DVC (`dvc repro`), pas par l'API.
     """
     global chatbot_instance
-    
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    new_data_file = os.path.join(base_dir, "data", "new-data.json")
-    
-    # Check if new data file exists
-    if not os.path.exists(new_data_file):
-        raise HTTPException(
-            status_code=400,
-            detail=f"New data file not found at: {new_data_file}. Please upload your data file first."
-        )
-    
     try:
-        # Étape 1: Exécuter le script de chargement des nouvelles données
-        print("📥 Chargement des nouvelles données...")
-        result = subprocess.run(
-            [sys.executable, "src/load_new_data.py"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        )
-        print(result.stdout)
-        
-        # Étape 2: Réinitialiser le chatbot avec les nouvelles données
-        print("🔄 Réinitialisation du chatbot...")
-        chatbot_instance = EventChatbot()
-        
-        return RebuildResponse(
-            status="success",
-            message="Index rebuilt successfully",
-            index_size=chatbot_instance.index.ntotal,
-            total_events=len(chatbot_instance.chunks_df["uid"].unique()),
-            total_chunks=len(chatbot_instance.chunks_df)
-        )
-        
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Erreur lors du chargement des données: {e.stderr}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Failed to load new data: {e.stderr}"
-        )
+        new_instance = EventChatbot()
     except Exception as e:
-        print(f"❌ Erreur lors de la reconstruction: {str(e)}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Failed to rebuild index: {str(e)}"
-        )
-    
+        print(f"❌ Échec du rechargement : {e}")
+        raise HTTPException(status_code=500, detail="Échec du rechargement de l'index")
+    chatbot_instance = new_instance
+    return ReloadResponse(
+        status="success",
+        message="Index rechargé",
+        index_size=chatbot_instance.index.ntotal,
+        total_events=len(chatbot_instance.chunks_df["uid"].unique()),
+        total_chunks=len(chatbot_instance.chunks_df),
+    )
+
 # Get chatbot statistics
 @app.get("/stats", tags=["System"])
 async def get_stats():
@@ -248,21 +214,19 @@ async def get_stats():
 @app.get("/status")
 async def get_status():
     """Get current index status"""
+    index_dir = get_params().paths.index_dir
+    files = {
+        "data_file_exists": (index_dir / CHUNKS_FILE).exists(),
+        "index_file_exists": (index_dir / INDEX_FILE).exists(),
+    }
     if chatbot_instance is None:
-        return {
-            "index_loaded": False,
-            "total_chunks": 0,
-            "index_size": 0,
-            "data_file_exists": os.path.exists("../data/chunks_with_embeddings.json"),
-            "index_file_exists": os.path.exists("../data/faiss_index.idx")
-        }
-    
+        return {"index_loaded": False, "total_chunks": 0, "index_size": 0, **files}
+
     return {
         "index_loaded": True,
         "total_chunks": len(chatbot_instance.chunks_df),
         "index_size": chatbot_instance.index.ntotal,
-        "data_file_exists": os.path.exists("../data/chunks_with_embeddings.json"),
-        "index_file_exists": os.path.exists("../data/faiss_index.idx")
+        **files,
     }
 
 # Root endpoint

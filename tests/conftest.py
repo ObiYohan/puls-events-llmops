@@ -67,6 +67,5 @@ def ignore_local_dotenv(monkeypatch):
 @pytest.fixture(autouse=True)
 def set_test_env_vars(monkeypatch):
     """Secrets factices : aucun appel réseau n'est fait avec ces valeurs."""
-    monkeypatch.setenv("MISTRAL_API_KEY", "test_mock_key_12345")  # ancien load_new_data.py
     monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://test-resource.openai.azure.com")
     monkeypatch.setenv("AZURE_OPENAI_API_KEY", "test_azure_key_12345")

@@ -49,3 +49,20 @@ stages:
     metrics:
       - ${paths.embed_metrics}:
           cache: false
+
+  build_index:
+    cmd: python -m src.pipeline.build_index
+    deps:
+      - src/pipeline/build_index.py
+      - src/pipeline/embed.py
+      - src/pipeline/utils.py
+      - ${paths.chunks_dataset}
+      - ${paths.embeddings}
+    params:
+      - embedding.model
+    outs:
+      # Artefact unique servi par l'API (index FAISS + chunks + manifeste).
+      - ${paths.index_dir}
+    metrics:
+      - ${paths.index_metrics}:
+          cache: false

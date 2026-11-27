@@ -9,9 +9,8 @@ paths:                         # relatifs à la racine du projet
   chunk_metrics: metrics/chunk.json
   embeddings: data/processed/embeddings   # dossier : keys.json + vectors.npy + meta.json
   embed_metrics: metrics/embed.json
-  new_data: data/new-data.json
-  chunks: data/chunks_with_embeddings.json
-  index: data/faiss_index.idx
+  index_dir: data/processed/index        # artefact servi par l'API : faiss.index + chunks.json + manifest.json
+  index_metrics: metrics/build_index.json
 
 ingest:
   # Jeu public « evenements-publics-openagenda » sur OpenDataSoft (sans clé d'API)
@@ -65,7 +64,6 @@ embedding:
   pause_seconds: 0.5           # pause entre deux lots
   max_retries: 5               # sur 429, 5xx et erreurs réseau
   retry_base_seconds: 10.0     # délai doublé à chaque tentative : 10, 20, 40, 80, 160 s
-  rate_limit_pause_seconds: 60.0  # utilisé par l'ancien load_new_data.py (supprimé à l'étape 3)
 
 retrieval:
   k: 5                         # nombre d'événements distincts envoyés au LLM

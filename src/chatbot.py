@@ -8,6 +8,24 @@ import unicodedata
 
 from src.config import Params, get_params
 from src.llm import make_client
+from src.pipeline.build_index import CHUNKS_FILE, INDEX_FILE
+
+DATE_COLUMNS = ('firstdate_begin', 'firstdate_end', 'lastdate_begin', 'lastdate_end')
+# Fuseau d'affichage des horaires (événements en région PACA).
+DISPLAY_TZ = 'Europe/Paris'
+
+
+def parse_dates(series: pd.Series) -> pd.Series:
+    """Dates en UTC : chaînes ISO 8601 (pipeline) ou millisecondes epoch (ancien format)."""
+    if pd.api.types.is_numeric_dtype(series):
+        return pd.to_datetime(series, unit='ms', utc=True, errors='coerce')
+    return pd.to_datetime(series, utc=True, errors='coerce', format='ISO8601')
+
+
+def _local(value):
+    """Horodatage converti en heure locale d'affichage (NaT conservé)."""
+    ts = pd.to_datetime(value, utc=True, errors='coerce')
+    return ts.tz_convert(DISPLAY_TZ) if pd.notna(ts) else ts
 
 
 class EventChatbot:
@@ -19,37 +37,38 @@ class EventChatbot:
         self.params = params or get_params()
 
         if index_path is None:
-            index_path = self.params.paths.index
+            index_path = self.params.paths.index_dir / INDEX_FILE
         if chunks_path is None:
-            chunks_path = self.params.paths.chunks
+            chunks_path = self.params.paths.index_dir / CHUNKS_FILE
         
         if not os.path.exists(index_path):
             raise FileNotFoundError(
                 f"Index FAISS introuvable : {index_path}\n"
-                f"Veuillez exécuter le notebook data_process.ipynb pour générer l'index."
+                f"Lancez `uv run dvc repro` (ou `dvc pull`) pour générer l'index."
             )
         
         if not os.path.exists(chunks_path):
             raise FileNotFoundError(
                 f"Fichier chunks introuvable : {chunks_path}\n"
-                f"Veuillez exécuter le notebook data_process.ipynb pour générer les chunks."
+                f"Lancez `uv run dvc repro` (ou `dvc pull`) pour générer les chunks."
             )
         
         print(f"📂 Chargement de l'index depuis : {index_path}")
         print(f"📂 Chargement des chunks depuis : {chunks_path}")
         
         self.index = faiss.read_index(str(index_path))
-        self.chunks_df = pd.read_json(chunks_path)
-        
-        date_columns = ['firstdate_begin', 'firstdate_end', 'lastdate_begin', 'lastdate_end']
-        for col in date_columns:
+        # Identifiants et codes postaux restent du texte (zéro initial de 04, 05, 06).
+        self.chunks_df = pd.read_json(chunks_path, dtype={'uid': str, 'location_postalcode': str})
+        if self.index.ntotal != len(self.chunks_df):
+            raise ValueError(
+                f"Index et chunks désalignés : {self.index.ntotal} vecteurs pour {len(self.chunks_df)} chunks"
+            )
+        # La ligne i de l'index FAISS est le vecteur du chunk i.
+        self.embeddings = self.index.reconstruct_n(0, self.index.ntotal) if self.index.ntotal else np.empty((0, self.index.d), np.float32)
+
+        for col in DATE_COLUMNS:
             if col in self.chunks_df.columns:
-                self.chunks_df[col] = pd.to_datetime(
-                    self.chunks_df[col], 
-                    unit='ms',
-                    utc=True, 
-                    errors='coerce'
-                )
+                self.chunks_df[col] = parse_dates(self.chunks_df[col])
         
         current_date = pd.Timestamp.now(tz='UTC')
         future_events = self.chunks_df[self.chunks_df['lastdate_end'] >= current_date]
@@ -117,11 +136,16 @@ class EventChatbot:
         }
         
         for month_name, month_num in months_map.items():
-            if month_name in query_lower:
-                current_year = datetime.now().year
+            # Mot entier : « mars » ne doit pas être trouvé dans « Marseille ».
+            if re.search(rf'\b{month_name}\b', query_lower):
+                today = datetime.now()
                 year_match = re.search(r'\b(20\d{2})\b', query)
-                year = int(year_match.group(1)) if year_match else current_year
-                
+                if year_match:
+                    year = int(year_match.group(1))
+                else:
+                    # Sans année, un mois déjà passé désigne l'année suivante.
+                    year = today.year if month_num >= today.month else today.year + 1
+
                 return {
                     'type': 'month',
                     'month': month_num,
@@ -259,9 +283,7 @@ class EventChatbot:
         filtered_indices = df.index.tolist()
         
         # Construire l'index temporaire
-        filtered_embeddings = np.array([
-            self.chunks_df.loc[idx, 'embedding'] for idx in filtered_indices
-        ]).astype('float32')
+        filtered_embeddings = self.embeddings[filtered_indices]
         
         temp_index = faiss.IndexFlatL2(filtered_embeddings.shape[1])
         temp_index.add(filtered_embeddings)
@@ -349,10 +371,11 @@ class EventChatbot:
             # FIX #6 : Distinguer événement ponctuel / multi-jours pour éviter
             # que le LLM confonde firstdate_begin et lastdate_end comme une seule date.
             date_info = []
-            fdb = pd.to_datetime(first_row.get('firstdate_begin'), utc=True, errors='coerce') if 'firstdate_begin' in first_row else None
-            fde = pd.to_datetime(first_row.get('firstdate_end'), utc=True, errors='coerce') if 'firstdate_end' in first_row else None
-            ldb = pd.to_datetime(first_row.get('lastdate_begin'), utc=True, errors='coerce') if 'lastdate_begin' in first_row else None
-            lde = pd.to_datetime(first_row.get('lastdate_end'), utc=True, errors='coerce') if 'lastdate_end' in first_row else None
+            # Horaires affichés en heure de Paris (stockés en UTC pour les filtres).
+            fdb = _local(first_row.get('firstdate_begin')) if 'firstdate_begin' in first_row else None
+            fde = _local(first_row.get('firstdate_end')) if 'firstdate_end' in first_row else None
+            ldb = _local(first_row.get('lastdate_begin')) if 'lastdate_begin' in first_row else None
+            lde = _local(first_row.get('lastdate_end')) if 'lastdate_end' in first_row else None
 
             is_multiday = (
                 fdb is not None and lde is not None and pd.notna(fdb) and pd.notna(lde)

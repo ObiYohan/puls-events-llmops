@@ -27,8 +27,8 @@ def test_project_params_file_is_valid():
 
 def test_relative_paths_are_resolved_from_project_root():
     params = load_params()
-    assert params.paths.chunks.is_absolute()
-    assert params.paths.chunks.is_relative_to(PROJECT_ROOT)
+    assert params.paths.index_dir.is_absolute()
+    assert params.paths.index_dir.is_relative_to(PROJECT_ROOT)
 
 
 def test_unknown_key_is_rejected(tmp_path, raw_params):

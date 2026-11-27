@@ -31,9 +31,8 @@ class PathsParams(_Section):
     chunk_metrics: Path
     embeddings: Path
     embed_metrics: Path
-    new_data: Path
-    chunks: Path
-    index: Path
+    index_dir: Path
+    index_metrics: Path
 
     @field_validator("*")
     @classmethod
@@ -94,7 +93,6 @@ class EmbeddingParams(_Section):
     pause_seconds: float = Field(ge=0)
     max_retries: int = Field(ge=0)
     retry_base_seconds: float = Field(ge=0)
-    rate_limit_pause_seconds: float = Field(ge=0)
 
 
 class RetrievalParams(_Section):
