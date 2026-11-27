@@ -37,6 +37,8 @@ class PathsParams(_Section):
     reference_set: Path
     eval_metrics: Path
     eval_cases: Path
+    system_prompt: Path
+    promotion_report: Path
 
     @field_validator("*")
     @classmethod
@@ -127,6 +129,22 @@ class EvaluationParams(_Section):
     thresholds: EvaluationThresholds
 
 
+class PromotionParams(_Section):
+    tolerance: float = Field(ge=0, le=1)
+
+
+class MlflowParams(_Section):
+    experiment: str = Field(min_length=1)
+    registered_model: str = Field(min_length=1)
+    champion_alias: str = Field(min_length=1)
+
+
+class ModelPrice(_Section):
+    """Prix en $ par million de tokens."""
+    input: float = Field(ge=0)
+    output: float = Field(ge=0)
+
+
 class Params(_Section):
     paths: PathsParams
     ingest: IngestParams
@@ -135,6 +153,18 @@ class Params(_Section):
     retrieval: RetrievalParams
     generation: GenerationParams
     evaluation: EvaluationParams
+    promotion: PromotionParams
+    mlflow: MlflowParams
+    pricing: dict[str, ModelPrice]
+
+    @model_validator(mode="after")
+    def _check_pricing(self) -> "Params":
+        """Chaque modèle utilisé doit avoir un prix : le coût des runs ne doit pas être sous-estimé."""
+        used = {self.embedding.model, self.generation.model, self.evaluation.judge_model}
+        missing = sorted(used - set(self.pricing))
+        if missing:
+            raise ValueError(f"prix manquant dans `pricing` pour : {', '.join(missing)}")
+        return self
 
 
 def load_params(path: Path = PARAMS_FILE) -> Params:

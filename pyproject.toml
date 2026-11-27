@@ -21,6 +21,7 @@ dependencies = [
     "pydantic>=2.13.3",
     "httpx>=0.28.1",
     "openai>=3.59.0",
+    "mlflow-skinny>=3.18.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -36,8 +37,10 @@ include = [
 
 [dependency-groups]
 dev = [
+    "alembic>=1.20.1",
     "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
+    "sqlalchemy>=2.1.9",
 ]
 eval = [
     "deepeval>=4.3.5",

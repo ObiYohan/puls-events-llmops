@@ -75,6 +75,7 @@ stages:
       - src/llm.py
       - ${paths.index_dir}
       - ${paths.reference_set}
+      - ${paths.system_prompt}
     params:
       - retrieval
       - generation
@@ -84,4 +85,21 @@ stages:
     metrics:
       # Scores moyens, seuils, validité et tokens consommés (génération + juge).
       - ${paths.eval_metrics}:
+          cache: false
+
+  promote:
+    # Aucun appel payant : run MLflow (DagsHub) + décision + alias « champion ».
+    cmd: python -m src.pipeline.promote
+    deps:
+      - src/pipeline/promote.py
+      - ${paths.eval_metrics}
+      - ${paths.eval_cases}
+      - ${paths.index_dir}
+    params:
+      - promotion
+      - mlflow
+      - pricing
+      - evaluation.thresholds
+    metrics:
+      - ${paths.promotion_report}:
           cache: false

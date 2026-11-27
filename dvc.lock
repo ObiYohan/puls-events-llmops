@@ -178,8 +178,8 @@ stages:
       nfiles: 3
     - path: src/chatbot.py
       hash: md5
-      md5: aadaf6109ee77771d3d05bca9aa6547f
-      size: 26056
+      md5: c435358bf4e8551bdee15bfc11bc7e16
+      size: 23869
     - path: src/llm.py
       hash: md5
       md5: af8084b7c947fcad5670f7883a34b1b2
@@ -188,6 +188,10 @@ stages:
       hash: md5
       md5: 9044867843bfd3bb19508389344521c6
       size: 11347
+    - path: src/prompts/system_prompt.txt
+      hash: md5
+      md5: 88720452809633ecf62525745e395065
+      size: 1929
     - path: tests/eval/reference_set.json
       hash: md5
       md5: bb2174d33f3d73307088d0a70b5a3668
@@ -196,7 +200,7 @@ stages:
       params.yaml:
         evaluation:
           judge_model: gpt-5-mini
-          judge_reasoning_effort: low
+          judge_reasoning_effort: minimal
           max_workers: 4
           max_retries: 5
           retry_base_seconds: 10.0
@@ -216,9 +220,57 @@ stages:
     outs:
     - path: data/eval/cases.json
       hash: md5
-      md5: e6f881afb2022fa5ecbb4203878f2ca7
-      size: 229835
+      md5: 7c8920ca81556372d0d6d4ac9be8241b
+      size: 229089
     - path: metrics/evaluate.json
       hash: md5
-      md5: cd81bb63d61b68b2269eead2ed7cf79a
-      size: 688
+      md5: 7b13ef8f9a41fe12d7a26fbc719ee14b
+      size: 690
+  promote:
+    cmd: python -m src.pipeline.promote
+    deps:
+    - path: data/eval/cases.json
+      hash: md5
+      md5: 7c8920ca81556372d0d6d4ac9be8241b
+      size: 229089
+    - path: data/processed/index
+      hash: md5
+      md5: bdb9706ab9ea0f4caccd5992f0438d33.dir
+      size: 10981898
+      nfiles: 3
+    - path: metrics/evaluate.json
+      hash: md5
+      md5: 7b13ef8f9a41fe12d7a26fbc719ee14b
+      size: 690
+    - path: src/pipeline/promote.py
+      hash: md5
+      md5: ea0b6d026978ba43729751a28cfd9b37
+      size: 10452
+    params:
+      params.yaml:
+        evaluation.thresholds:
+          faithfulness: 0.88
+          answer_relevancy: 0.88
+          contextual_precision: 0.8
+          contextual_recall: 0.82
+        mlflow:
+          experiment: puls-events-rag
+          registered_model: puls-events-rag
+          champion_alias: champion
+        pricing:
+          text-embedding-3-small:
+            input: 0.02
+            output: 0.0
+          gpt-4.1-mini:
+            input: 0.4
+            output: 1.6
+          gpt-5-mini:
+            input: 0.25
+            output: 2.0
+        promotion:
+          tolerance: 0.05
+    outs:
+    - path: metrics/promotion.json
+      hash: md5
+      md5: ab690c8a8bf88b4033961f82377fb28b
+      size: 238

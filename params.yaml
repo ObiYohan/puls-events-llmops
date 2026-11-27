@@ -14,6 +14,8 @@ paths:                         # relatifs à la racine du projet
   reference_set: tests/eval/reference_set.json  # jeu de référence versionné dans Git
   eval_metrics: metrics/evaluate.json
   eval_cases: data/eval/cases.json      # détail par question (réponse, contexte, scores, raisons)
+  system_prompt: src/prompts/system_prompt.txt  # prompt de génération (hash loggé dans MLflow)
+  promotion_report: metrics/promotion.json
 
 ingest:
   # Jeu public « evenements-publics-openagenda » sur OpenDataSoft (sans clé d'API)
@@ -95,3 +97,23 @@ evaluation:
     answer_relevancy: 0.88
     contextual_precision: 0.80
     contextual_recall: 0.82
+
+promotion:
+  # La version candidate devient « champion » si l'évaluation est valide, si
+  # tous les seuils sont atteints et si aucune métrique ne recule de plus de
+  # `tolerance` par rapport au champion (bruit du juge observé : jusqu'à 0,08).
+  # La comparaison au champion n'a de sens qu'avec le même juge et le même jeu
+  # de référence ; sinon seuls les seuils s'appliquent.
+  tolerance: 0.05
+
+mlflow:                        # serveur MLflow : variables MLFLOW_TRACKING_* (.env / secrets CI)
+  experiment: puls-events-rag
+  registered_model: puls-events-rag
+  champion_alias: champion
+
+pricing:                       # $ par million de tokens (Azure, Global Standard), pour le coût des runs
+  # Vérifiés le 27/11/2026 (Azure Retail Prices) sauf gpt-5-mini : tarif public
+  # OpenAI, à confirmer sur la facture Azure.
+  text-embedding-3-small: {input: 0.02, output: 0.0}
+  gpt-4.1-mini: {input: 0.40, output: 1.60}
+  gpt-5-mini: {input: 0.25, output: 2.00}
