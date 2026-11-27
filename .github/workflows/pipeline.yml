@@ -1,0 +1,105 @@
+name: Pipeline RAG
+
+# Réindexation hebdomadaire (B1) : collecte → chunks → embeddings → index
+# → évaluation → promotion du champion (B3, B4). Les étapes dont les entrées
+# n'ont pas changé sont sautées par DVC : aucune dépense si le corpus est stable.
+on:
+  schedule:
+    - cron: "0 4 * * 1"   # lundi 04:00 UTC (05:00 ou 06:00 à Paris)
+  workflow_dispatch:
+    inputs:
+      evaluate:
+        description: "Évaluer et promouvoir (≈ 0,30 à 0,45 $ sur Azure si l'index a changé)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write          # commit de dvc.lock et des métriques
+
+concurrency:
+  group: pipeline-rag      # jamais deux réindexations en parallèle
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    name: Réindexation et évaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+      AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+      MLFLOW_TRACKING_URI: ${{ vars.MLFLOW_TRACKING_URI }}
+      MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
+      MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
+      MLFLOW_DISABLE_AGENT_HINT: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier les secrets
+        run: |
+          missing=""
+          for name in AZURE_OPENAI_ENDPOINT AZURE_OPENAI_API_KEY MLFLOW_TRACKING_URI MLFLOW_TRACKING_USERNAME MLFLOW_TRACKING_PASSWORD; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Secrets ou variables manquants :$missing (Settings > Secrets and variables > Actions)"
+            exit 1
+          fi
+
+      - name: Installer uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Installer Python 3.13
+        run: uv python install 3.13
+
+      - name: Installer les dépendances
+        run: uv sync --locked
+
+      - name: Configurer le stockage DVC (DagsHub)
+        run: |
+          uv run dvc remote modify origin --local auth basic
+          uv run dvc remote modify origin --local user "$MLFLOW_TRACKING_USERNAME"
+          uv run dvc remote modify origin --local password "$MLFLOW_TRACKING_PASSWORD"
+
+      # Récupère la dernière version, dont le cache d'embeddings : seuls les
+      # chunks nouveaux ou modifiés seront envoyés à Azure.
+      - name: Récupérer les données versionnées
+        run: uv run dvc pull
+
+      - name: Exécuter le pipeline
+        env:
+          EVENT: ${{ github.event_name }}
+          EVALUATE: ${{ inputs.evaluate }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$EVALUATE" = "false" ]; then
+            uv run dvc repro build_index
+          else
+            uv run dvc repro
+          fi
+
+      - name: Versionner les nouvelles données
+        run: uv run dvc push
+
+      - name: Commiter dvc.lock et les métriques
+        env:
+          BRANCH: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dvc.lock metrics/
+          if git diff --cached --quiet; then
+            echo "Aucun changement à commiter."
+            exit 0
+          fi
+          git commit -m "Update index and evaluation (pipeline run $RUN_NUMBER)"
+          git pull --rebase origin "$BRANCH"
+          git push origin "HEAD:$BRANCH"
+
+      - name: Résumé
+        if: always()
+        run: uv run python -m src.pipeline.summary

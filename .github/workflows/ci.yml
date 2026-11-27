@@ -26,7 +26,7 @@ jobs:
       - name: Installer les dépendances
         run: uv sync --locked
 
-      # L'API Mistral est mockée : aucun secret n'est nécessaire ici.
+      # API LLM simulée et MLflow local : aucun secret ni appel réseau ici.
       - name: Lancer les tests
         run: uv run pytest tests/ --cov=src --cov=api --cov-report=term-missing --cov-report=xml
 

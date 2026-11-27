@@ -188,3 +188,9 @@ def test_run_requires_tracking_uri(local_mlflow, monkeypatch):
     monkeypatch.delenv(promote.TRACKING_URI_VAR)
     with pytest.raises(RuntimeError, match=promote.TRACKING_URI_VAR):
         promote.run()
+
+
+def test_run_params_use_the_judge_actually_used_by_the_evaluation(params):
+    logged = promote.run_params(params, evaluation(judge_reasoning_effort="high", judge_model="juge-du-run"))
+    assert logged["judge_reasoning_effort"] == "high"
+    assert logged["judge_model"] == "juge-du-run"

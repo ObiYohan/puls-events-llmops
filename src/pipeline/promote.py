@@ -108,8 +108,10 @@ def run_params(params: Params, evaluation: dict[str, Any]) -> dict[str, Any]:
         "generation.temperature": g.temperature,
         "generation.max_tokens": g.max_tokens,
         "prompt_hash": prompt_hash(params.paths.system_prompt),
-        "judge_model": e.judge_model,
-        "judge_reasoning_effort": e.judge_reasoning_effort,
+        # Juge réellement utilisé, lu dans le résultat de l'évaluation (et non dans
+        # params.yaml, qui peut avoir changé depuis) : clé de comparaison au champion.
+        "judge_model": evaluation.get("judge_model", e.judge_model),
+        "judge_reasoning_effort": evaluation.get("judge_reasoning_effort", e.judge_reasoning_effort),
         "reference_set_version": evaluation["reference_set_version"],
         "n_cases": evaluation["n_cases"],
     }
